@@ -18,46 +18,86 @@ def cargar_datos():
             conexion.close()
             return df
     except Exception as e:
-        print(f"SQL error, usando CSV: {e}")
+        print(f"⚠️ SQL error, usando CSV: {e}")
 
     return pd.read_csv("TRACKING_MEX_preview.csv", dtype=str)
 
 
-# === DATA LOAD ===
+# ========================
+# === DATA LOAD ==========
+# ========================
 df = cargar_datos()
 df.columns = [c.strip().lower() for c in df.columns]
 
-# === NORMALIZATION ===
-df["usd_total"] = df["usd_total"].apply(lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0)
+print("📊 Columnas disponibles:", df.columns.tolist())
+
+# ========================
+# === NORMALIZATION ======
+# ========================
+
+# --- Normalizar columna de monto ---
+if "usd_total" not in df.columns:
+    for alt in ["usd", "total_amount", "amount", "deposit_amount"]:
+        if alt in df.columns:
+            df.rename(columns={alt: "usd_total"}, inplace=True)
+            break
+
+if "usd_total" not in df.columns:
+    df["usd_total"] = 0.0
+    print("⚠️ Columna de monto no encontrada, creada en 0")
+
+df["usd_total"] = df["usd_total"].apply(
+    lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0
+)
+
+# --- Fecha ---
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df[df["date"].notna()]
 
-for col in ["country", "affiliate", "team", "agent", "type"]:
+# --- ID siempre string ---
+if "id" in df.columns:
+    df["id"] = df["id"].astype(str)
+
+# --- Texto general ---
+for col in ["country", "affiliate", "team", "agent"]:
     if col in df.columns:
         df[col] = df[col].astype(str).str.strip().str.title()
 
+# --- Type FTD / RTN robusto ---
+if "type" in df.columns:
+    df["type"] = df["type"].astype(str).str.strip().str.upper()
+
 fecha_min, fecha_max = df["date"].min(), df["date"].max()
 
-# === APP INIT ===
+# ========================
+# === APP INIT ===========
+# ========================
 app = dash.Dash(__name__)
 server = app.server
 app.title = "OBL Digital — Deposits Dashboard"
 
-# === LAYOUT ===
+# ========================
+# === LAYOUT =============
+# ========================
 app.layout = html.Div(
     style={"backgroundColor": "#0d0d0d", "padding": "20px"},
     children=[
 
         html.H1("📊 DASHBOARD DEPOSITS", style={
-            "textAlign": "center", "color": "#D4AF37", "marginBottom": "30px"
+            "textAlign": "center",
+            "color": "#D4AF37",
+            "marginBottom": "30px"
         }),
 
         html.Div(style={"display": "flex"}, children=[
 
             # ===== FILTERS =====
             html.Div(style={
-                "width": "25%", "backgroundColor": "#1a1a1a", "padding": "20px",
-                "borderRadius": "12px", "boxShadow": "0 0 15px rgba(212,175,55,0.3)"
+                "width": "25%",
+                "backgroundColor": "#1a1a1a",
+                "padding": "20px",
+                "borderRadius": "12px",
+                "boxShadow": "0 0 15px rgba(212,175,55,0.3)"
             }, children=[
 
                 html.H4("Date", style={"color": "#D4AF37"}),
@@ -125,7 +165,9 @@ app.layout = html.Div(
     ]
 )
 
-# === CALLBACK ===
+# ========================
+# === CALLBACK ===========
+# ========================
 @app.callback(
     [
         Output("card-total-deposits", "children"),
@@ -164,7 +206,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if countries:
         df_f = df_f[df_f["country"].isin(countries)]
     if id_sel:
-        df_f = df_f[df_f["id"] == id_sel]
+        df_f = df_f[df_f["id"] == str(id_sel)]
 
     total_deposits = len(df_f)
     total_amount = df_f["usd_total"].sum()
@@ -173,11 +215,16 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     std_amount = 0
 
     if id_sel:
-        df_ftd = df_f[df_f["type"] == "Ftd"].sort_values("date").head(1)
+        df_ftd = df_f[df_f["type"] == "FTD"].sort_values("date").head(1)
         if not df_ftd.empty:
             ftd_amount = df_ftd["usd_total"].iloc[0]
             ftd_date = df_ftd["date"].iloc[0]
-            df_std = df_f[(df_f["type"] == "Rtn") & (df_f["date"] > ftd_date)].sort_values("date").head(1)
+
+            df_std = df_f[
+                (df_f["type"] == "RTN") &
+                (df_f["date"] > ftd_date)
+            ].sort_values("date").head(1)
+
             if not df_std.empty:
                 std_amount = df_std["usd_total"].iloc[0]
 
@@ -192,33 +239,29 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
             "textAlign": "center"
         })
 
-    pie1 = px.pie(df_f, names="country", values="usd_total", title="Total Amount by Country")
-    pie2 = px.pie(df_f.groupby("country").size().reset_index(name="count"),
-                  names="country", values="count", title="Total Deposits by Country")
-    pie3 = px.pie(df_f, names="affiliate", values="usd_total", title="Total Amount by Affiliate")
-    pie4 = px.pie(df_f.groupby("affiliate").size().reset_index(name="count"),
-                  names="affiliate", values="count", title="Total Deposits by Affiliate")
+    pie_amount_country = px.pie(df_f, names="country", values="usd_total", title="Total Amount by Country")
+    pie_deposits_country = px.pie(
+        df_f.groupby("country").size().reset_index(name="count"),
+        names="country", values="count", title="Total Deposits by Country"
+    )
 
-    for fig in [pie1, pie2, pie3, pie4]:
+    pie_amount_aff = px.pie(df_f, names="affiliate", values="usd_total", title="Total Amount by Affiliate")
+    pie_deposits_aff = px.pie(
+        df_f.groupby("affiliate").size().reset_index(name="count"),
+        names="affiliate", values="count", title="Total Deposits by Affiliate"
+    )
+
+    for fig in [pie_amount_country, pie_deposits_country, pie_amount_aff, pie_deposits_aff]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
     # === TABLE ===
-    if id_sel:
-        df_table = df_f.copy()
-        df_table["total_deposits"] = 1
-        df_table = df_table.groupby("date", as_index=False).agg({
-            "country": "first",
-            "affiliate": "first",
-            "usd_total": "sum",
-            "total_deposits": "sum"
-        })
-    else:
-        df_table = df_f.groupby("date", as_index=False).agg({
-            "country": "first",
-            "affiliate": "first",
-            "usd_total": "sum"
-        })
-        df_table["total_deposits"] = df_f.groupby("date").size().values
+    df_table = df_f.groupby("date", as_index=False).agg({
+        "country": "first",
+        "affiliate": "first",
+        "usd_total": "sum"
+    })
+    df_table["total_deposits"] = df_f.groupby("date").size().values
+    df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
 
     columns = [
         {"name": "DATE", "id": "date"},
@@ -228,18 +271,19 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         {"name": "TOTAL DEPOSITS", "id": "total_deposits"},
     ]
 
-    df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
-
     return (
         card("TOTAL DEPOSITS", total_deposits),
         card("FTD", ftd_amount),
         card("STD", std_amount),
         card("TOTAL AMOUNT", total_amount),
-        pie2, pie1, pie4, pie3,
+        pie_deposits_country,
+        pie_amount_country,
+        pie_deposits_aff,
+        pie_amount_aff,
         df_table.to_dict("records"),
         columns
     )
-    
+
     # === 9️⃣ Captura PDF/PPT desde iframe ===
 app.index_string = '''
 <!DOCTYPE html>
@@ -282,6 +326,6 @@ app.index_string = '''
 </html>
 '''
 
-
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
