@@ -32,8 +32,6 @@ df.columns = [c.strip().lower() for c in df.columns]
 # ========================
 # === NORMALIZATION ======
 # ========================
-
-# --- Normalizar monto ---
 if "usd_total" not in df.columns:
     for alt in ["usd", "total_amount", "amount", "deposit_amount"]:
         if alt in df.columns:
@@ -47,22 +45,18 @@ df["usd_total"] = df["usd_total"].apply(
     lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0
 )
 
-# --- Fecha ---
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df[df["date"].notna()]
 
-# --- ID string ---
 df["id"] = df["id"].astype(str)
 
-# --- Texto ---
 for col in ["country", "affiliate", "team", "agent"]:
     if col in df.columns:
         df[col] = df[col].astype(str).str.strip().str.title()
 
-# --- Type ---
 df["type"] = df["type"].astype(str).str.strip().str.upper()
 
-# --- DATE FTD por ID ---
+# --- DATE FTD ---
 df_ftd_dates = (
     df[df["type"] == "FTD"]
     .sort_values("date")
@@ -73,7 +67,6 @@ df_ftd_dates = (
 
 df = df.merge(df_ftd_dates, on="id", how="left")
 
-# --- Rango base ---
 fecha_min = pd.Timestamp("2025-09-01")
 fecha_max = df["date"].max()
 
@@ -248,29 +241,33 @@ app.layout = html.Div(
 )
 def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countries):
 
-    # ---------- DF PARA CARDS / GRÁFICAS ----------
-    df_f = df.copy()
+    # ========= BASE FILTER (shared) =========
+    df_base = df.copy()
 
     if start and end:
-        df_f = df_f[(df_f["date"] >= start) & (df_f["date"] <= end)]
-
-    if teams:
-        df_f = df_f[(df_f["team"].isin(teams)) & (df_f["type"] == "RTN")]
-
-    if agents:
-        df_f = df_f[(df_f["agent"].isin(agents)) & (df_f["type"] == "RTN")]
+        df_base = df_base[(df_base["date"] >= start) & (df_base["date"] <= end)]
 
     if affiliates:
-        df_f = df_f[df_f["affiliate"].isin(affiliates)]
+        df_base = df_base[df_base["affiliate"].isin(affiliates)]
 
     if countries:
-        df_f = df_f[df_f["country"].isin(countries)]
+        df_base = df_base[df_base["country"].isin(countries)]
 
     if id_sel:
-        df_f = df_f[df_f["id"] == str(id_sel)]
+        df_base = df_base[df_base["id"] == str(id_sel)]
 
-    total_deposits = len(df_f)
-    total_amount = df_f["usd_total"].sum()
+    # ========= METRICS FILTER (RTN only for team/agent) =========
+    df_metrics = df_base.copy()
+
+    if teams:
+        df_metrics = df_metrics[(df_metrics["team"].isin(teams)) & (df_metrics["type"] == "RTN")]
+
+    if agents:
+        df_metrics = df_metrics[(df_metrics["agent"].isin(agents)) & (df_metrics["type"] == "RTN")]
+
+    # ========= CARDS =========
+    total_deposits = len(df_metrics)
+    total_amount = df_metrics["usd_total"].sum()
 
     ftd_amount = 0
     std_amount = 0
@@ -291,45 +288,30 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
             if not df_std.empty:
                 std_amount = df_std["usd_total"].iloc[0]
 
-    # ---------- CHARTS ----------
+    # ========= CHARTS =========
     pie_deposits_country = px.pie(
-        df_f.groupby("country").size().reset_index(name="count"),
+        df_metrics.groupby("country").size().reset_index(name="count"),
         names="country", values="count", title="Total Deposits by Country"
     )
 
     pie_amount_country = px.pie(
-        df_f, names="country", values="usd_total", title="Total Amount by Country"
+        df_metrics, names="country", values="usd_total", title="Total Amount by Country"
     )
 
     pie_deposits_aff = px.pie(
-        df_f.groupby("affiliate").size().reset_index(name="count"),
+        df_metrics.groupby("affiliate").size().reset_index(name="count"),
         names="affiliate", values="count", title="Total Deposits by Affiliate"
     )
 
     pie_amount_aff = px.pie(
-        df_f, names="affiliate", values="usd_total", title="Total Amount by Affiliate"
+        df_metrics, names="affiliate", values="usd_total", title="Total Amount by Affiliate"
     )
 
     for fig in [pie_deposits_country, pie_amount_country, pie_deposits_aff, pie_amount_aff]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
-    # ---------- TABLA (CLAVE DEL FIX) ----------
-    df_table = df.copy()
-
-    # ⚠️ SOLO FILTRAR POR date (NO por date_ftd)
-    if start and end:
-        df_table = df_table[(df_table["date"] >= start) & (df_table["date"] <= end)]
-
-    if affiliates:
-        df_table = df_table[df_table["affiliate"].isin(affiliates)]
-
-    if countries:
-        df_table = df_table[df_table["country"].isin(countries)]
-
-    if id_sel:
-        df_table = df_table[df_table["id"] == str(id_sel)]
-
-    df_table = df_table.groupby(
+    # ========= TABLE (CONNECTED TO FILTERS) =========
+    df_table = df_base.groupby(
         ["date", "id", "agent", "team", "country", "affiliate", "date_ftd"],
         as_index=False
     ).agg(
@@ -409,6 +391,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
