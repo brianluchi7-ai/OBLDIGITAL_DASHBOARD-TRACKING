@@ -22,6 +22,7 @@ def cargar_datos():
 
     return pd.read_csv("TRACKING_MEX_preview.csv", dtype=str)
 
+
 # ========================
 # === DATA LOAD ==========
 # ========================
@@ -37,7 +38,10 @@ if "usd_total" not in df.columns:
             df.rename(columns={alt: "usd_total"}, inplace=True)
             break
 
-df["usd_total"] = df.get("usd_total", 0).apply(
+if "usd_total" not in df.columns:
+    df["usd_total"] = 0.0
+
+df["usd_total"] = df["usd_total"].apply(
     lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0
 )
 
@@ -74,21 +78,24 @@ server = app.server
 app.title = "OBL Digital — Deposits Dashboard"
 
 # ========================
-# === HELPERS ============
+# === UI HELPERS =========
 # ========================
-def filtro_titulo(txt):
-    return html.H4(txt, style={
-        "color": "#D4AF37",
-        "textAlign": "center",
-        "marginTop": "15px",
-        "marginBottom": "5px"
-    })
+def filtro_titulo(texto):
+    return html.H4(
+        texto,
+        style={
+            "color": "#D4AF37",
+            "textAlign": "center",
+            "marginTop": "15px",
+            "marginBottom": "5px"
+        }
+    )
 
 def card(title, value, is_money=True):
-    val = f"${value:,.2f}" if is_money else f"{int(value):,}"
+    display_value = f"${value:,.2f}" if is_money else f"{int(value):,}"
     return html.Div([
         html.H4(title, style={"color": "#D4AF37"}),
-        html.H2(val, style={"color": "#FFF"})
+        html.H2(display_value, style={"color": "#FFF"})
     ], style={
         "backgroundColor": "#1a1a1a",
         "padding": "20px",
@@ -111,6 +118,7 @@ app.layout = html.Div(
 
         html.Div(style={"display": "flex"}, children=[
 
+            # ===== FILTERS =====
             html.Div(style={
                 "width": "25%",
                 "backgroundColor": "#1a1a1a",
@@ -129,21 +137,42 @@ app.layout = html.Div(
                 ),
 
                 filtro_titulo("Team Leader"),
-                dcc.Dropdown(sorted(df[df["type"]=="RTN"]["team"].dropna().unique()), multi=True, id="filtro-team"),
+                dcc.Dropdown(
+                    sorted(df[df["type"] == "RTN"]["team"].dropna().unique()),
+                    multi=True,
+                    id="filtro-team"
+                ),
 
                 filtro_titulo("Agent"),
-                dcc.Dropdown(sorted(df[df["type"]=="RTN"]["agent"].dropna().unique()), multi=True, id="filtro-agent"),
+                dcc.Dropdown(
+                    sorted(df[df["type"] == "RTN"]["agent"].dropna().unique()),
+                    multi=True,
+                    id="filtro-agent"
+                ),
 
                 filtro_titulo("ID"),
-                dcc.Dropdown(sorted(df["id"].unique()), id="filtro-id"),
+                dcc.Dropdown(
+                    sorted(df["id"].dropna().unique()),
+                    multi=False,
+                    id="filtro-id"
+                ),
 
                 filtro_titulo("Affiliate"),
-                dcc.Dropdown(sorted(df["affiliate"].unique()), multi=True, id="filtro-affiliate"),
+                dcc.Dropdown(
+                    sorted(df["affiliate"].dropna().unique()),
+                    multi=True,
+                    id="filtro-affiliate"
+                ),
 
                 filtro_titulo("Country"),
-                dcc.Dropdown(sorted(df["country"].unique()), multi=True, id="filtro-country"),
+                dcc.Dropdown(
+                    sorted(df["country"].dropna().unique()),
+                    multi=True,
+                    id="filtro-country"
+                ),
             ]),
 
+            # ===== MAIN =====
             html.Div(style={"width": "72%"}, children=[
 
                 html.Div(style={"display": "flex", "justifyContent": "space-around"}, children=[
@@ -168,8 +197,16 @@ app.layout = html.Div(
                     id="tabla-detalle",
                     page_size=15,
                     style_table={"overflowX": "auto"},
-                    style_cell={"backgroundColor": "#1a1a1a", "color": "#f2f2f2", "textAlign": "center"},
-                    style_header={"backgroundColor": "#D4AF37", "color": "#000", "fontWeight": "bold"},
+                    style_cell={
+                        "backgroundColor": "#1a1a1a",
+                        "color": "#f2f2f2",
+                        "textAlign": "center"
+                    },
+                    style_header={
+                        "backgroundColor": "#D4AF37",
+                        "color": "#000",
+                        "fontWeight": "bold"
+                    },
                 )
             ])
         ])
@@ -181,25 +218,25 @@ app.layout = html.Div(
 # ========================
 @app.callback(
     [
-        Output("card-total-deposits","children"),
-        Output("card-ftd","children"),
-        Output("card-std","children"),
-        Output("card-total-amount","children"),
-        Output("pie-deposits-country","figure"),
-        Output("pie-amount-country","figure"),
-        Output("pie-deposits-affiliate","figure"),
-        Output("pie-amount-affiliate","figure"),
-        Output("tabla-detalle","data"),
-        Output("tabla-detalle","columns"),
+        Output("card-total-deposits", "children"),
+        Output("card-ftd", "children"),
+        Output("card-std", "children"),
+        Output("card-total-amount", "children"),
+        Output("pie-deposits-country", "figure"),
+        Output("pie-amount-country", "figure"),
+        Output("pie-deposits-affiliate", "figure"),
+        Output("pie-amount-affiliate", "figure"),
+        Output("tabla-detalle", "data"),
+        Output("tabla-detalle", "columns"),
     ],
     [
-        Input("filtro-fecha","start_date"),
-        Input("filtro-fecha","end_date"),
-        Input("filtro-team","value"),
-        Input("filtro-agent","value"),
-        Input("filtro-id","value"),
-        Input("filtro-affiliate","value"),
-        Input("filtro-country","value"),
+        Input("filtro-fecha", "start_date"),
+        Input("filtro-fecha", "end_date"),
+        Input("filtro-team", "value"),
+        Input("filtro-agent", "value"),
+        Input("filtro-id", "value"),
+        Input("filtro-affiliate", "value"),
+        Input("filtro-country", "value"),
     ]
 )
 def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countries):
@@ -271,6 +308,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         df_table.to_dict("records"),
         columns
     )
+
 
     # === 9️⃣ Captura PDF/PPT desde iframe ===
 app.index_string = '''
