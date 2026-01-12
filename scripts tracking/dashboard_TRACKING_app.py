@@ -29,13 +29,11 @@ def cargar_datos():
 df = cargar_datos()
 df.columns = [c.strip().lower() for c in df.columns]
 
-print("📊 Columnas disponibles:", df.columns.tolist())
-
 # ========================
 # === NORMALIZATION ======
 # ========================
 
-# --- Normalizar columna de monto ---
+# --- Normalizar monto ---
 if "usd_total" not in df.columns:
     for alt in ["usd", "total_amount", "amount", "deposit_amount"]:
         if alt in df.columns:
@@ -44,7 +42,6 @@ if "usd_total" not in df.columns:
 
 if "usd_total" not in df.columns:
     df["usd_total"] = 0.0
-    print("⚠️ Columna de monto no encontrada, creada en 0")
 
 df["usd_total"] = df["usd_total"].apply(
     lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0
@@ -54,18 +51,27 @@ df["usd_total"] = df["usd_total"].apply(
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df[df["date"].notna()]
 
-# --- ID siempre string ---
-if "id" in df.columns:
-    df["id"] = df["id"].astype(str)
+# --- ID string ---
+df["id"] = df["id"].astype(str)
 
-# --- Texto general ---
+# --- Texto ---
 for col in ["country", "affiliate", "team", "agent"]:
     if col in df.columns:
         df[col] = df[col].astype(str).str.strip().str.title()
 
-# --- Type FTD / RTN robusto ---
-if "type" in df.columns:
-    df["type"] = df["type"].astype(str).str.strip().str.upper()
+# --- Type ---
+df["type"] = df["type"].astype(str).str.strip().str.upper()
+
+# --- DATE FTD por ID ---
+df_ftd_dates = (
+    df[df["type"] == "FTD"]
+    .sort_values("date")
+    .groupby("id", as_index=False)
+    .first()[["id", "date"]]
+    .rename(columns={"date": "date_ftd"})
+)
+
+df = df.merge(df_ftd_dates, on="id", how="left")
 
 fecha_min, fecha_max = df["date"].min(), df["date"].max()
 
@@ -79,6 +85,17 @@ app.title = "OBL Digital — Deposits Dashboard"
 # ========================
 # === LAYOUT =============
 # ========================
+def filtro_titulo(texto):
+    return html.H4(
+        texto,
+        style={
+            "color": "#D4AF37",
+            "textAlign": "center",
+            "marginTop": "15px",
+            "marginBottom": "5px"
+        }
+    )
+
 app.layout = html.Div(
     style={"backgroundColor": "#0d0d0d", "padding": "20px"},
     children=[
@@ -97,10 +114,11 @@ app.layout = html.Div(
                 "backgroundColor": "#1a1a1a",
                 "padding": "20px",
                 "borderRadius": "12px",
-                "boxShadow": "0 0 15px rgba(212,175,55,0.3)"
+                "boxShadow": "0 0 15px rgba(212,175,55,0.3)",
+                "textAlign": "center"
             }, children=[
 
-                html.H4("Date", style={"color": "#D4AF37"}),
+                filtro_titulo("Date"),
                 dcc.DatePickerRange(
                     id="filtro-fecha",
                     start_date=fecha_min,
@@ -108,20 +126,40 @@ app.layout = html.Div(
                     display_format="YYYY-MM-DD"
                 ),
 
-                html.H4("Team Leader", style={"color": "#D4AF37"}),
-                dcc.Dropdown(sorted(df["team"].dropna().unique()), multi=True, id="filtro-team"),
+                filtro_titulo("Team Leader"),
+                dcc.Dropdown(
+                    sorted(df[df["type"] == "RTN"]["team"].dropna().unique()),
+                    multi=True,
+                    id="filtro-team"
+                ),
 
-                html.H4("Agent", style={"color": "#D4AF37"}),
-                dcc.Dropdown(sorted(df["agent"].dropna().unique()), multi=True, id="filtro-agent"),
+                filtro_titulo("Agent"),
+                dcc.Dropdown(
+                    sorted(df[df["type"] == "RTN"]["agent"].dropna().unique()),
+                    multi=True,
+                    id="filtro-agent"
+                ),
 
-                html.H4("ID", style={"color": "#D4AF37"}),
-                dcc.Dropdown(sorted(df["id"].dropna().unique()), multi=False, id="filtro-id"),
+                filtro_titulo("ID"),
+                dcc.Dropdown(
+                    sorted(df["id"].dropna().unique()),
+                    multi=False,
+                    id="filtro-id"
+                ),
 
-                html.H4("Affiliate", style={"color": "#D4AF37"}),
-                dcc.Dropdown(sorted(df["affiliate"].dropna().unique()), multi=True, id="filtro-affiliate"),
+                filtro_titulo("Affiliate"),
+                dcc.Dropdown(
+                    sorted(df["affiliate"].dropna().unique()),
+                    multi=True,
+                    id="filtro-affiliate"
+                ),
 
-                html.H4("Country", style={"color": "#D4AF37"}),
-                dcc.Dropdown(sorted(df["country"].dropna().unique()), multi=True, id="filtro-country"),
+                filtro_titulo("Country"),
+                dcc.Dropdown(
+                    sorted(df["country"].dropna().unique()),
+                    multi=True,
+                    id="filtro-country"
+                ),
             ]),
 
             # ===== MAIN =====
@@ -197,14 +235,19 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
 
     if start and end:
         df_f = df_f[(df_f["date"] >= start) & (df_f["date"] <= end)]
+
     if teams:
-        df_f = df_f[df_f["team"].isin(teams)]
+        df_f = df_f[(df_f["team"].isin(teams)) & (df_f["type"] == "RTN")]
+
     if agents:
-        df_f = df_f[df_f["agent"].isin(agents)]
+        df_f = df_f[(df_f["agent"].isin(agents)) & (df_f["type"] == "RTN")]
+
     if affiliates:
         df_f = df_f[df_f["affiliate"].isin(affiliates)]
+
     if countries:
         df_f = df_f[df_f["country"].isin(countries)]
+
     if id_sel:
         df_f = df_f[df_f["id"] == str(id_sel)]
 
@@ -220,11 +263,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
             ftd_amount = df_ftd["usd_total"].iloc[0]
             ftd_date = df_ftd["date"].iloc[0]
 
-            df_std = df_f[
-                (df_f["type"] == "RTN") &
-                (df_f["date"] > ftd_date)
-            ].sort_values("date").head(1)
-
+            df_std = df_f[(df_f["type"] == "RTN") & (df_f["date"] > ftd_date)].sort_values("date").head(1)
             if not df_std.empty:
                 std_amount = df_std["usd_total"].iloc[0]
 
@@ -255,19 +294,26 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
     # === TABLE ===
-    df_table = df_f.groupby("date", as_index=False).agg({
-        "country": "first",
-        "affiliate": "first",
-        "usd_total": "sum"
-    })
-    df_table["total_deposits"] = df_f.groupby("date").size().values
+    df_table = df_f.groupby(
+        ["date", "id", "agent", "team", "date_ftd", "country", "affiliate"],
+        as_index=False
+    ).agg(
+        total_amount=("usd_total", "sum"),
+        total_deposits=("usd_total", "count")
+    )
+
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
+    df_table["date_ftd"] = df_table["date_ftd"].dt.strftime("%Y-%m-%d")
 
     columns = [
         {"name": "DATE", "id": "date"},
+        {"name": "ID", "id": "id"},
+        {"name": "AGENT", "id": "agent"},
+        {"name": "TEAM", "id": "team"},
         {"name": "COUNTRY", "id": "country"},
         {"name": "AFFILIATE", "id": "affiliate"},
-        {"name": "TOTAL AMOUNT", "id": "usd_total"},
+        {"name": "DATE FTD", "id": "date_ftd"},
+        {"name": "TOTAL AMOUNT", "id": "total_amount"},
         {"name": "TOTAL DEPOSITS", "id": "total_deposits"},
     ]
 
@@ -328,4 +374,5 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
