@@ -62,7 +62,7 @@ for col in ["country", "affiliate", "team", "agent"]:
 # --- Type ---
 df["type"] = df["type"].astype(str).str.strip().str.upper()
 
-# --- DATE FTD por ID (primer FTD real del ID) ---
+# --- DATE FTD por ID ---
 df_ftd_dates = (
     df[df["type"] == "FTD"]
     .sort_values("date")
@@ -73,7 +73,7 @@ df_ftd_dates = (
 
 df = df.merge(df_ftd_dates, on="id", how="left")
 
-# --- Rango base (septiembre → max date) ---
+# --- Rango base ---
 fecha_min = pd.Timestamp("2025-09-01")
 fecha_max = df["date"].max()
 
@@ -85,7 +85,7 @@ server = app.server
 app.title = "OBL Digital — Deposits Dashboard"
 
 # ========================
-# === LAYOUT =============
+# === UI HELPERS =========
 # ========================
 def filtro_titulo(texto):
     return html.H4(
@@ -110,6 +110,9 @@ def card(title, value, is_money=True):
         "textAlign": "center"
     })
 
+# ========================
+# === LAYOUT =============
+# ========================
 app.layout = html.Div(
     style={"backgroundColor": "#0d0d0d", "padding": "20px"},
     children=[
@@ -245,7 +248,7 @@ app.layout = html.Div(
 )
 def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countries):
 
-    # --- DF base para métricas (con RTN filter en team/agent) ---
+    # ---------- DF PARA CARDS / GRÁFICAS ----------
     df_f = df.copy()
 
     if start and end:
@@ -266,7 +269,6 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if id_sel:
         df_f = df_f[df_f["id"] == str(id_sel)]
 
-    # --- Cards ---
     total_deposits = len(df_f)
     total_amount = df_f["usd_total"].sum()
 
@@ -289,7 +291,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
             if not df_std.empty:
                 std_amount = df_std["usd_total"].iloc[0]
 
-    # --- Charts ---
+    # ---------- CHARTS ----------
     pie_deposits_country = px.pie(
         df_f.groupby("country").size().reset_index(name="count"),
         names="country", values="count", title="Total Deposits by Country"
@@ -311,24 +313,23 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     for fig in [pie_deposits_country, pie_amount_country, pie_deposits_aff, pie_amount_aff]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
-    # --- Tabla (SIN restricción RTN en agent/team) ---
-    df_table_base = df.copy()
+    # ---------- TABLA (CLAVE DEL FIX) ----------
+    df_table = df.copy()
 
+    # ⚠️ SOLO FILTRAR POR date (NO por date_ftd)
     if start and end:
-        df_table_base = df_table_base[
-            (df_table_base["date"] >= start) & (df_table_base["date"] <= end)
-        ]
+        df_table = df_table[(df_table["date"] >= start) & (df_table["date"] <= end)]
 
     if affiliates:
-        df_table_base = df_table_base[df_table_base["affiliate"].isin(affiliates)]
+        df_table = df_table[df_table["affiliate"].isin(affiliates)]
 
     if countries:
-        df_table_base = df_table_base[df_table_base["country"].isin(countries)]
+        df_table = df_table[df_table["country"].isin(countries)]
 
     if id_sel:
-        df_table_base = df_table_base[df_table_base["id"] == str(id_sel)]
+        df_table = df_table[df_table["id"] == str(id_sel)]
 
-    df_table = df_table_base.groupby(
+    df_table = df_table.groupby(
         ["date", "id", "agent", "team", "country", "affiliate", "date_ftd"],
         as_index=False
     ).agg(
@@ -408,6 +409,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
