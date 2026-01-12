@@ -40,6 +40,7 @@ df["usd_total"] = df["usd_total"].apply(
     lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0
 )
 
+# 🔥 FIX REAL DE FECHAS (fecha + hora)
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df[df["date"].notna()]
 
@@ -236,7 +237,7 @@ app.layout = html.Div(
 )
 def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countries):
 
-    # 🔥 FIX REAL DE FECHAS
+    # 🔥 FIX DEFINITIVO DE FECHAS (con o sin hora)
     start = pd.to_datetime(start).normalize()
     end = pd.to_datetime(end).normalize() + pd.Timedelta(days=1)
 
@@ -244,19 +245,15 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
 
     if affiliates:
         df_base = df_base[df_base["affiliate"].isin(affiliates)]
-
     if countries:
         df_base = df_base[df_base["country"].isin(countries)]
-
     if id_sel:
         df_base = df_base[df_base["id"] == str(id_sel)]
 
     # === Metrics (RTN only for team/agent)
     df_metrics = df_base.copy()
-
     if teams:
         df_metrics = df_metrics[(df_metrics["team"].isin(teams)) & (df_metrics["type"] == "RTN")]
-
     if agents:
         df_metrics = df_metrics[(df_metrics["agent"].isin(agents)) & (df_metrics["type"] == "RTN")]
 
@@ -284,17 +281,20 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     for fig in [pie_deposits_country, pie_amount_country, pie_deposits_affiliate, pie_amount_affiliate]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
-    # === TABLE (FULLY CORRECT)
-    df_table = df_base.groupby(
-        ["date", "id", "agent", "team", "country", "affiliate", "date_ftd"],
-        as_index=False
-    ).agg(
-        total_amount=("usd_total", "sum"),
-        total_deposits=("usd_total", "count")
-    )
+    # =======================
+    # ✅ TABLE FIX (SIN GROUPBY)
+    # =======================
+    df_table = df_base.copy()
 
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
     df_table["date_ftd"] = df_table["date_ftd"].dt.strftime("%Y-%m-%d")
+    df_table["total_amount"] = df_table["usd_total"]
+    df_table["total_deposits"] = 1
+
+    df_table = df_table[
+        ["date", "id", "agent", "team", "country", "affiliate",
+         "date_ftd", "total_amount", "total_deposits"]
+    ].dropna(subset=["id", "date"])
 
     columns = [{"name": c.upper(), "id": c} for c in df_table.columns]
 
@@ -355,6 +355,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
