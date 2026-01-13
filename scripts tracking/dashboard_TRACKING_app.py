@@ -273,27 +273,38 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if agents:
         df_calc = df_calc[df_calc["agent"].isin(agents)]
 
-    total_deposits = len(df_calc)
-    total_amount = df_calc["usd_total"].sum()
-
     # ======================
-    # ✅ FTD / STD COUNT
+    # ✅ MÉTRICAS REALES
     # ======================
-    ftd_count = (
-        df[
-            (df["date_ftd"] >= start) &
-            (df["date_ftd"] < end)
-        ]["id"].nunique()
+    
+    # --- FTD REAL (conteo de filas)
+    ftd_df = df_base[df_base["type"] == "FTD"]
+    ftd_count = len(ftd_df)
+    
+    # --- RTN REAL (conteo de filas)
+    rtn_df = df_base[df_base["type"] == "RTN"]
+    rtn_count = len(rtn_df)
+    
+    # --- STD REAL (primer RTN después del FTD por ID)
+    rtn_after_ftd = df_base[
+        (df_base["type"] == "RTN") &
+        (df_base["date"] > df_base["date_ftd"])
+    ]
+    
+    std_df = (
+        rtn_after_ftd
+        .sort_values("date")
+        .groupby("id", as_index=False)
+        .first()
     )
-
-    std_count = (
-        df[
-            (df["type"] == "RTN") &
-            (df["date"] > df["date_ftd"]) &
-            (df["date"] >= start) &
-            (df["date"] < end)
-        ]["id"].nunique()
-    )
+    
+    std_count = len(std_df)
+    
+    # --- TOTAL DEPOSITS = FTD + RTN (NO STD)
+    total_deposits = ftd_count + rtn_count
+    
+    # --- TOTAL AMOUNT = USD FTD + RTN
+    total_amount = df_base["usd_total"].sum()
 
     # ======================
     # === CHARTS ===========
@@ -393,6 +404,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
