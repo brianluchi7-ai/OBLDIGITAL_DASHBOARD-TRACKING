@@ -40,7 +40,7 @@ df["usd_total"] = df["usd_total"].apply(
     lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0
 )
 
-# 🔥 FIX REAL DE FECHAS (fecha + hora)
+# === FIX FECHAS (con o sin hora) ===
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df[df["date"].notna()]
 
@@ -52,16 +52,17 @@ for col in ["country", "affiliate", "team", "agent"]:
 
 df["type"] = df["type"].astype(str).str.strip().str.upper()
 
-# --- DATE FTD ---
-df_ftd_dates = (
-    df[df["type"] == "FTD"]
-    .sort_values("date")
-    .groupby("id", as_index=False)
-    .first()[["id", "date"]]
-    .rename(columns={"date": "date_ftd"})
+# =====================================================
+# ✅ DATE_FTD REAL (primer depósito histórico por ID)
+# =====================================================
+df_first_deposit = (
+    df.sort_values("date")
+      .groupby("id", as_index=False)
+      .first()[["id", "date"]]
+      .rename(columns={"date": "date_ftd"})
 )
 
-df = df.merge(df_ftd_dates, on="id", how="left")
+df = df.merge(df_first_deposit, on="id", how="left")
 
 fecha_min = pd.Timestamp("2025-09-01")
 fecha_max = df["date"].max()
@@ -237,7 +238,6 @@ app.layout = html.Div(
 )
 def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countries):
 
-    # 🔥 FIX DEFINITIVO DE FECHAS (con o sin hora)
     start = pd.to_datetime(start).normalize()
     end = pd.to_datetime(end).normalize() + pd.Timedelta(days=1)
 
@@ -250,7 +250,6 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if id_sel:
         df_base = df_base[df_base["id"] == str(id_sel)]
 
-    # === Metrics (RTN only for team/agent)
     df_metrics = df_base.copy()
     if teams:
         df_metrics = df_metrics[(df_metrics["team"].isin(teams)) & (df_metrics["type"] == "RTN")]
@@ -260,32 +259,22 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     total_deposits = len(df_metrics)
     total_amount = df_metrics["usd_total"].sum()
 
-    ftd_amount = std_amount = 0
-    if id_sel:
-        df_id = df[df["id"] == str(id_sel)]
-        ftd = df_id[df_id["type"] == "FTD"].sort_values("date").head(1)
-        if not ftd.empty:
-            ftd_amount = ftd["usd_total"].iloc[0]
-            std = df_id[(df_id["type"] == "RTN") & (df_id["date"] > ftd["date"].iloc[0])].head(1)
-            if not std.empty:
-                std_amount = std["usd_total"].iloc[0]
-
-    # === Charts
-    pie_deposits_country = px.pie(df_metrics.groupby("country").size().reset_index(name="count"),
-                                  names="country", values="count")
+    pie_deposits_country = px.pie(
+        df_metrics.groupby("country").size().reset_index(name="count"),
+        names="country", values="count"
+    )
     pie_amount_country = px.pie(df_metrics, names="country", values="usd_total")
-    pie_deposits_affiliate = px.pie(df_metrics.groupby("affiliate").size().reset_index(name="count"),
-                                    names="affiliate", values="count")
+    pie_deposits_affiliate = px.pie(
+        df_metrics.groupby("affiliate").size().reset_index(name="count"),
+        names="affiliate", values="count"
+    )
     pie_amount_affiliate = px.pie(df_metrics, names="affiliate", values="usd_total")
 
     for fig in [pie_deposits_country, pie_amount_country, pie_deposits_affiliate, pie_amount_affiliate]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
-    # =======================
-    # ✅ TABLE FIX (SIN GROUPBY)
-    # =======================
+    # === TABLE ===
     df_table = df_base.copy()
-
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
     df_table["date_ftd"] = df_table["date_ftd"].dt.strftime("%Y-%m-%d")
     df_table["total_amount"] = df_table["usd_total"]
@@ -300,8 +289,8 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
 
     return (
         card("TOTAL DEPOSITS", total_deposits, False),
-        card("FTD", ftd_amount),
-        card("STD", std_amount),
+        card("FTD", 0),
+        card("STD", 0),
         card("TOTAL AMOUNT", total_amount),
         pie_deposits_country,
         pie_amount_country,
@@ -355,6 +344,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
