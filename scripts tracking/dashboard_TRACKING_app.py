@@ -243,7 +243,14 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     start = pd.to_datetime(start).normalize()
     end = pd.to_datetime(end).normalize() + pd.Timedelta(days=1)
 
-    df_base = df[(df["date"] >= start) & (df["date"] < end)]
+    # ======================
+    # DATASET BASE COMPLETO
+    # ======================
+    df_base = df.copy()
+    df_base = df_base[
+        (df_base["date"] >= start) &
+        (df_base["date"] < end)
+    ]
 
     if affiliates:
         df_base = df_base[df_base["affiliate"].isin(affiliates)]
@@ -253,16 +260,18 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         df_base = df_base[df_base["id"] == str(id_sel)]
 
     # ======================
-    # === METRICS ==========
+    # DATASET BASE PARA TODO
     # ======================
-    df_metrics = df_base.copy()
+    df_calc = df_base.copy()
+    
     if teams:
-        df_metrics = df_metrics[(df_metrics["team"].isin(teams)) & (df_metrics["type"] == "RTN")]
+        df_calc = df_calc[df_calc["team"].isin(teams)]
+    
     if agents:
-        df_metrics = df_metrics[(df_metrics["agent"].isin(agents)) & (df_metrics["type"] == "RTN")]
+        df_calc = df_calc[df_calc["agent"].isin(agents)]
 
-    total_deposits = len(df_metrics)
-    total_amount = df_metrics["usd_total"].sum()
+    total_deposits = len(df_calc)
+    total_amount = df_calc["usd_total"].sum()
 
     # ======================
     # ✅ FTD / STD COUNT
@@ -287,15 +296,16 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     # === CHARTS ===========
     # ======================
     pie_deposits_country = px.pie(
-        df_metrics.groupby("country").size().reset_index(name="count"),
+        df_calc.groupby("country").size().reset_index(name="count"),
         names="country", values="count"
     )
-    pie_amount_country = px.pie(df_metrics, names="country", values="usd_total")
+    
+    pie_amount_country = px.pie(df_calc, names="country", values="usd_total")
     pie_deposits_affiliate = px.pie(
-        df_metrics.groupby("affiliate").size().reset_index(name="count"),
+        df_calc.groupby("affiliate").size().reset_index(name="count"),
         names="affiliate", values="count"
     )
-    pie_amount_affiliate = px.pie(df_metrics, names="affiliate", values="usd_total")
+    pie_amount_affiliate = px.pie(df_calc, names="affiliate", values="usd_total")
 
     for fig in [pie_deposits_country, pie_amount_country, pie_deposits_affiliate, pie_amount_affiliate]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
@@ -380,6 +390,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
