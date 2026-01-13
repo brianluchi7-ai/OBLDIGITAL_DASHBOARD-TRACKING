@@ -247,25 +247,25 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     end = pd.to_datetime(end).normalize() + pd.Timedelta(days=1)
 
     # ======================
-    # DATASET BASE COMPLETO
+    # DATASET ÚNICO REAL (IGUAL QUE COMISIONES)
     # ======================
-    df_base = df.copy()
-    df_base = df_base[
-        (df_base["date"] >= start) &
-        (df_base["date"] < end)
+    df_calc = df.copy()
+    
+    # Fecha
+    df_calc = df_calc[
+        (df_calc["date"] >= start) &
+        (df_calc["date"] < end)
     ]
-
+    
+    # Filtros globales (aplican a TODO)
     if affiliates:
-        df_base = df_base[df_base["affiliate"].isin(affiliates)]
+        df_calc = df_calc[df_calc["affiliate"].isin(affiliates)]
+    
     if countries:
-        df_base = df_base[df_base["country"].isin(countries)]
+        df_calc = df_calc[df_calc["country"].isin(countries)]
+    
     if id_sel:
-        df_base = df_base[df_base["id"] == str(id_sel)]
-
-    # ======================
-    # DATASET BASE PARA TODO
-    # ======================
-    df_calc = df_base.copy()
+        df_calc = df_calc[df_calc["id"] == str(id_sel)]
     
     if teams:
         df_calc = df_calc[df_calc["team"].isin(teams)]
@@ -273,23 +273,19 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if agents:
         df_calc = df_calc[df_calc["agent"].isin(agents)]
 
+
     # ======================
     # ✅ MÉTRICAS REALES
     # ======================
     
-    # --- FTD REAL (conteo de filas)
-    ftd_df = df_base[df_base["type"] == "FTD"]
-    ftd_count = len(ftd_df)
+    ftd_df = df_calc[df_calc["type"] == "FTD"]
+    rtn_df = df_calc[df_calc["type"] == "RTN"]
     
-    # --- RTN REAL (conteo de filas)
-    rtn_df = df_base[df_base["type"] == "RTN"]
+    ftd_count = len(ftd_df)
     rtn_count = len(rtn_df)
     
-    # --- STD REAL (primer RTN después del FTD por ID)
-    rtn_after_ftd = df_base[
-        (df_base["type"] == "RTN") &
-        (df_base["date"] > df_base["date_ftd"])
-    ]
+    # STD = primer RTN después del FTD
+    rtn_after_ftd = rtn_df[rtn_df["date"] > rtn_df["date_ftd"]]
     
     std_df = (
         rtn_after_ftd
@@ -300,11 +296,9 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     
     std_count = len(std_df)
     
-    # --- TOTAL DEPOSITS = FTD + RTN (NO STD)
     total_deposits = ftd_count + rtn_count
-    
-    # --- TOTAL AMOUNT = USD FTD + RTN
-    total_amount = df_base["usd_total"].sum()
+    total_amount = df_calc["usd_total"].sum()
+
 
     # ======================
     # === CHARTS ===========
@@ -404,6 +398,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
