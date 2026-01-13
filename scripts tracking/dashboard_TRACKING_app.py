@@ -13,13 +13,13 @@ def cargar_datos():
     try:
         conexion = crear_conexion()
         if conexion:
-            query = "SELECT * FROM TRACKING_MEX_CLEAN"
+            query = "SELECT * FROM CMN_MASTER_MEX_CLEAN"
             df = pd.read_sql(query, conexion)
             conexion.close()
             return df
     except Exception as e:
         print(f"⚠️ SQL error, usando CSV: {e}")
-    return pd.read_csv("TRACKING_MEX_preview.csv", dtype=str)
+    return pd.read_csv("CMN_MASTER_MEX_preview.csv", dtype=str)
 
 # ========================
 # === DATA LOAD ==========
@@ -377,6 +377,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
