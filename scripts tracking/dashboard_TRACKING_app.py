@@ -214,7 +214,6 @@ app.layout = html.Div(
     ]
 )
 
-
 # ========================
 # === CALLBACK ===========
 # ========================
@@ -247,67 +246,51 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     end = pd.to_datetime(end).normalize() + pd.Timedelta(days=1)
 
     # ======================
-    # DATASET ÚNICO REAL (IGUAL QUE COMISIONES)
+    # DATASET ÚNICO REAL
     # ======================
     df_calc = df.copy()
-    
-    # Fecha
-    df_calc = df_calc[
-        (df_calc["date"] >= start) &
-        (df_calc["date"] < end)
-    ]
-    
-    # Filtros globales (aplican a TODO)
+    df_calc = df_calc[(df_calc["date"] >= start) & (df_calc["date"] < end)]
+
     if affiliates:
         df_calc = df_calc[df_calc["affiliate"].isin(affiliates)]
-    
     if countries:
         df_calc = df_calc[df_calc["country"].isin(countries)]
-    
     if id_sel:
         df_calc = df_calc[df_calc["id"] == str(id_sel)]
-    
+
+    # 🔧 FIX: no eliminar FTD al filtrar RTN
     if teams:
-        df_calc = df_calc[df_calc["team"].isin(teams)]
-    
+        df_calc = df_calc[(df_calc["team"].isin(teams)) | (df_calc["type"] == "FTD")]
     if agents:
-        df_calc = df_calc[df_calc["agent"].isin(agents)]
-
+        df_calc = df_calc[(df_calc["agent"].isin(agents)) | (df_calc["type"] == "FTD")]
 
     # ======================
-    # ✅ MÉTRICAS REALES
+    # MÉTRICAS
     # ======================
-    
     ftd_df = df_calc[df_calc["type"] == "FTD"]
     rtn_df = df_calc[df_calc["type"] == "RTN"]
-    
+
     ftd_count = len(ftd_df)
     rtn_count = len(rtn_df)
-    
-    # STD = primer RTN después del FTD
-    rtn_after_ftd = rtn_df[rtn_df["date"] > rtn_df["date_ftd"]]
-    
+
     std_df = (
-        rtn_after_ftd
+        rtn_df[rtn_df["date"] > rtn_df["date_ftd"]]
         .sort_values("date")
         .groupby("id", as_index=False)
         .first()
     )
-    
+
     std_count = len(std_df)
-    
     total_deposits = ftd_count + rtn_count
     total_amount = df_calc["usd_total"].sum()
 
-
     # ======================
-    # === CHARTS ===========
+    # CHARTS
     # ======================
     pie_deposits_country = px.pie(
         df_calc.groupby("country").size().reset_index(name="count"),
         names="country", values="count"
     )
-    
     pie_amount_country = px.pie(df_calc, names="country", values="usd_total")
     pie_deposits_affiliate = px.pie(
         df_calc.groupby("affiliate").size().reset_index(name="count"),
@@ -319,9 +302,9 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
     # ======================
-    # ✅ TABLE (CLEAN)
+    # TABLE
     # ======================
-    df_table = df_base.copy()
+    df_table = df_calc.copy()  # 🔧 FIX CRÍTICO
     df_table = df_table[
         (df_table["usd_total"] > 0) &
         (df_table["id"].notna()) &
@@ -398,6 +381,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
