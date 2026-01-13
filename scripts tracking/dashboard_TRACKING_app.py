@@ -40,7 +40,6 @@ df["usd_total"] = df["usd_total"].apply(
     lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0
 )
 
-# === FIX FECHAS (con o sin hora) ===
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df[df["date"].notna()]
 
@@ -250,6 +249,9 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if id_sel:
         df_base = df_base[df_base["id"] == str(id_sel)]
 
+    # ======================
+    # === METRICS ==========
+    # ======================
     df_metrics = df_base.copy()
     if teams:
         df_metrics = df_metrics[(df_metrics["team"].isin(teams)) & (df_metrics["type"] == "RTN")]
@@ -259,6 +261,28 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     total_deposits = len(df_metrics)
     total_amount = df_metrics["usd_total"].sum()
 
+    # ======================
+    # ✅ FTD / STD COUNT
+    # ======================
+    ftd_count = (
+        df[
+            (df["date_ftd"] >= start) &
+            (df["date_ftd"] < end)
+        ]["id"].nunique()
+    )
+
+    std_count = (
+        df[
+            (df["type"] == "RTN") &
+            (df["date"] > df["date_ftd"]) &
+            (df["date"] >= start) &
+            (df["date"] < end)
+        ]["id"].nunique()
+    )
+
+    # ======================
+    # === CHARTS ===========
+    # ======================
     pie_deposits_country = px.pie(
         df_metrics.groupby("country").size().reset_index(name="count"),
         names="country", values="count"
@@ -273,8 +297,17 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     for fig in [pie_deposits_country, pie_amount_country, pie_deposits_affiliate, pie_amount_affiliate]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
-    # === TABLE ===
+    # ======================
+    # ✅ TABLE (CLEAN)
+    # ======================
     df_table = df_base.copy()
+    df_table = df_table[
+        (df_table["usd_total"] > 0) &
+        (df_table["id"].notna()) &
+        (df_table["agent"].notna()) &
+        (df_table["team"].notna())
+    ]
+
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
     df_table["date_ftd"] = df_table["date_ftd"].dt.strftime("%Y-%m-%d")
     df_table["total_amount"] = df_table["usd_total"]
@@ -283,14 +316,14 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     df_table = df_table[
         ["date", "id", "agent", "team", "country", "affiliate",
          "date_ftd", "total_amount", "total_deposits"]
-    ].dropna(subset=["id", "date"])
+    ]
 
     columns = [{"name": c.upper(), "id": c} for c in df_table.columns]
 
     return (
         card("TOTAL DEPOSITS", total_deposits, False),
-        card("FTD", 0),
-        card("STD", 0),
+        card("FTD", ftd_count, False),
+        card("STD", std_count, False),
         card("TOTAL AMOUNT", total_amount),
         pie_deposits_country,
         pie_amount_country,
@@ -344,6 +377,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
