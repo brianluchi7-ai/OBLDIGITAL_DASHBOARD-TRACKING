@@ -107,7 +107,9 @@ app.layout = html.Div(
         "backgroundColor": "#0d0d0d",
         "color": "#000000",
         "fontFamily": "Arial",
-        "padding": "20px",
+        "padding": "20px"
+    },
+    children=[
 
         html.H1("📊 DASHBOARD DEPOSITS", style={
             "textAlign": "center",
@@ -211,6 +213,7 @@ app.layout = html.Div(
         ])
     ]
 )
+
 
 # ========================
 # === CALLBACK ===========
@@ -390,6 +393,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
