@@ -256,29 +256,46 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if agents:
         df_calc = df_calc[df_calc["agent"].isin(agents)]
 
-    # 🔥🔥🔥 FIX DEFINITIVO (MISMA LÓGICA QUE COMISIONES)
-    df_calc = df_calc[df_calc["type"].isin(["FTD", "RTN"])]
+    # ===============================
+    # 🔥 FIX DEFINITIVO (MISMA LÓGICA QUE COMISIONES)
+    # ===============================
 
-    # ===== MÉTRICAS CORRECTAS =====
-    total_amount = df_calc["usd_total"].sum()
+    # USD REAL
+    if "usd" in df_calc.columns:
+        df_calc["usd"] = df_calc["usd"].apply(
+            lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0
+        )
+    else:
+        # fallback si solo existe usd_total
+        df_calc["usd"] = df_calc["usd_total"]
+
+    # SOLO depósitos reales
+    df_calc = df_calc[df_calc["usd"] > 0]
+
+    # ===============================
+    # MÉTRICAS CORRECTAS
+    # ===============================
+    total_amount = df_calc["usd"].sum()
     total_deposits = len(df_calc)
 
-    # (Se dejan en 0 como pediste)
+    # Se mantienen en 0 como pediste
     ftd_ids = 0
     std_count = 0
 
-    # ===== CHARTS =====
+    # ===============================
+    # CHARTS
+    # ===============================
     pie_deposits_country = px.pie(
         df_calc.groupby("country").size().reset_index(name="count"),
         names="country", values="count"
     )
-    pie_amount_country = px.pie(df_calc, names="country", values="usd_total")
+    pie_amount_country = px.pie(df_calc, names="country", values="usd")
 
     pie_deposits_affiliate = px.pie(
         df_calc.groupby("affiliate").size().reset_index(name="count"),
         names="affiliate", values="count"
     )
-    pie_amount_affiliate = px.pie(df_calc, names="affiliate", values="usd_total")
+    pie_amount_affiliate = px.pie(df_calc, names="affiliate", values="usd")
 
     for fig in [
         pie_deposits_country,
@@ -288,10 +305,12 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     ]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
-    # ===== TABLE =====
+    # ===============================
+    # TABLE
+    # ===============================
     df_table = df_calc.copy()
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
-    df_table["total_amount"] = df_table["usd_total"]
+    df_table["total_amount"] = df_table["usd"]
     df_table["total_deposits"] = 1
 
     df_table = df_table[
@@ -358,6 +377,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
