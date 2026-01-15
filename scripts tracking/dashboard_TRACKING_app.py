@@ -242,7 +242,7 @@ app.layout = html.Div(
 )
 def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countries):
 
-    # 🔧 FIX CRÍTICO — evita NoneType error
+    # ===== FECHAS SEGURAS =====
     if start is None or end is None:
         start = fecha_min
         end = fecha_max + pd.Timedelta(days=1)
@@ -250,9 +250,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         start = pd.to_datetime(start).normalize()
         end = pd.to_datetime(end).normalize() + pd.Timedelta(days=1)
 
-    # ======================
-    # DATASET ÚNICO REAL
-    # ======================
+    # ===== DATASET BASE (IGUAL QUE COMISIONES) =====
     df_calc = df.copy()
     df_calc = df_calc[(df_calc["date"] >= start) & (df_calc["date"] < end)]
 
@@ -262,34 +260,44 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         df_calc = df_calc[df_calc["country"].isin(countries)]
     if id_sel:
         df_calc = df_calc[df_calc["id"] == str(id_sel)]
-
     if teams:
-        df_calc = df_calc[(df_calc["team"].isin(teams)) | (df_calc["type"] == "FTD")]
+        df_calc = df_calc[df_calc["team"].isin(teams)]
     if agents:
-        df_calc = df_calc[(df_calc["agent"].isin(agents)) | (df_calc["type"] == "FTD")]
+        df_calc = df_calc[df_calc["agent"].isin(agents)]
 
-    # ======================
-    # MÉTRICAS
-    # ======================
-    ftd_df = df_calc[df_calc["type"] == "FTD"]
-    rtn_df = df_calc[df_calc["type"] == "RTN"]
+    # =================================================
+    # ✅ MÉTRICAS CORRECTAS (ALINEADAS CON LTV / COMISIONES)
+    # =================================================
 
-    ftd_count = len(ftd_df)
-    rtn_count = len(rtn_df)
-
-    std_df = (
-        rtn_df[rtn_df["date"] > rtn_df["date_ftd"]]
-        .sort_values("date")
-        .groupby("id", as_index=False)
-        .first()
-    )
-
-    std_count = len(std_df)
-    total_deposits = ftd_count + rtn_count
+    # --- TOTAL AMOUNT (igual que Ventas USD)
     total_amount = df_calc["usd_total"].sum()
 
+    # --- TOTAL DEPOSITS (igual que Total Ventas en Comisiones)
+    total_deposits = len(df_calc)
+
+    # --- FTD REAL (IDs únicos cuyo primer depósito cae en el rango)
+    ftd_ids = df_calc[
+        (df_calc["type"] == "FTD") &
+        (df_calc["date_ftd"] >= start) &
+        (df_calc["date_ftd"] < end)
+    ]["id"].nunique()
+
+    # --- STD REAL (primer RTN posterior al FTD por ID)
+    std_df = (
+        df_calc[df_calc["type"] == "RTN"]
+        .merge(
+            df_calc[df_calc["type"] == "FTD"][["id", "date_ftd"]],
+            on="id",
+            how="inner"
+        )
+    )
+
+    std_df = std_df[std_df["date"] > std_df["date_ftd"]]
+    std_df = std_df.sort_values("date").groupby("id").first().reset_index()
+    std_count = len(std_df)
+
     # ======================
-    # CHARTS
+    # === CHARTS ===========
     # ======================
     pie_deposits_country = px.pie(
         df_calc.groupby("country").size().reset_index(name="count"),
@@ -302,20 +310,18 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     )
     pie_amount_affiliate = px.pie(df_calc, names="affiliate", values="usd_total")
 
-    for fig in [pie_deposits_country, pie_amount_country, pie_deposits_affiliate, pie_amount_affiliate]:
+    for fig in [
+        pie_deposits_country,
+        pie_amount_country,
+        pie_deposits_affiliate,
+        pie_amount_affiliate
+    ]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
     # ======================
-    # TABLE
+    # === TABLE ============
     # ======================
     df_table = df_calc.copy()
-    df_table = df_table[
-        (df_table["usd_total"] > 0) &
-        (df_table["id"].notna()) &
-        (df_table["agent"].notna()) &
-        (df_table["team"].notna())
-    ]
-
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
     df_table["date_ftd"] = df_table["date_ftd"].dt.strftime("%Y-%m-%d")
     df_table["total_amount"] = df_table["usd_total"]
@@ -330,7 +336,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
 
     return (
         card("TOTAL DEPOSITS", total_deposits, False),
-        card("FTD", ftd_count, False),
+        card("FTD", ftd_ids, False),
         card("STD", std_count, False),
         card("TOTAL AMOUNT", total_amount),
         pie_deposits_country,
@@ -385,6 +391,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
