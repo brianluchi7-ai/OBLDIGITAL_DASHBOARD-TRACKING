@@ -242,8 +242,13 @@ app.layout = html.Div(
 )
 def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countries):
 
-    start = pd.to_datetime(start).normalize()
-    end = pd.to_datetime(end).normalize() + pd.Timedelta(days=1)
+    # 🔧 FIX CRÍTICO — evita NoneType error
+    if start is None or end is None:
+        start = fecha_min
+        end = fecha_max + pd.Timedelta(days=1)
+    else:
+        start = pd.to_datetime(start).normalize()
+        end = pd.to_datetime(end).normalize() + pd.Timedelta(days=1)
 
     # ======================
     # DATASET ÚNICO REAL
@@ -258,7 +263,6 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if id_sel:
         df_calc = df_calc[df_calc["id"] == str(id_sel)]
 
-    # 🔧 FIX: no eliminar FTD al filtrar RTN
     if teams:
         df_calc = df_calc[(df_calc["team"].isin(teams)) | (df_calc["type"] == "FTD")]
     if agents:
@@ -304,7 +308,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     # ======================
     # TABLE
     # ======================
-    df_table = df_calc.copy()  # 🔧 FIX CRÍTICO
+    df_table = df_calc.copy()
     df_table = df_table[
         (df_table["usd_total"] > 0) &
         (df_table["id"].notna()) &
@@ -381,6 +385,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
