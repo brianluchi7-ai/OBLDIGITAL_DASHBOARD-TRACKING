@@ -21,7 +21,6 @@ def cargar_datos():
         print(f"⚠️ SQL error, usando CSV: {e}")
     return pd.read_csv("CMN_MASTER_MEX_CLEAN_preview.csv", dtype=str)
 
-
 # ========================
 # DATA LOAD
 # ========================
@@ -91,39 +90,22 @@ app = dash.Dash(__name__)
 server = app.server
 app.title = "OBL Digital — Deposits Dashboard"
 
-# ========================
-# 🔥 CARD STYLE UNIFICADO
-# ========================
-CARD_STYLE = {
-    "backgroundColor": "#1a1a1a",
-    "padding": "20px",
-    "borderRadius": "12px",
-    "textAlign": "center",
-    "boxShadow": "0 0 12px rgba(212,175,55,0.35)",
-    "width": "22%",
-    "minWidth": "220px",
-    "height": "120px",
-    "display": "flex",
-    "flexDirection": "column",
-    "justifyContent": "center",
-}
-
 def card(title, value, money=False):
     val = f"${value:,.2f}" if money else f"{int(value):,}"
     return html.Div(
         [
-            html.H4(title, style={
-                "color": "#D4AF37",
-                "marginBottom": "10px",
-                "fontSize": "14px"
-            }),
-            html.H2(val, style={
-                "color": "#FFF",
-                "fontSize": "26px",
-                "margin": "0"
-            })
+            html.H4(title, style={"color": "#D4AF37", "marginBottom": "10px"}),
+            html.H2(val, style={"color": "#FFF"})
         ],
-        style=CARD_STYLE
+        style={
+            "backgroundColor": "#1a1a1a",
+            "padding": "20px",
+            "borderRadius": "12px",
+            "textAlign": "center",
+            "boxShadow": "0 0 10px rgba(212,175,55,0.35)",
+            "width": "220px",
+            "minWidth": "220px"
+        }
     )
 
 # ========================
@@ -179,13 +161,14 @@ app.layout = html.Div(
             # === MAIN ===
             html.Div(style={"width": "72%"}, children=[
 
+                # 🔥 CARDS BIEN ALINEADAS
                 html.Div(
                     style={
                         "display": "flex",
-                        "justifyContent": "space-between",
-                        "alignItems": "stretch",
-                        "gap": "15px",
-                        "marginBottom": "20px"
+                        "justifyContent": "center",
+                        "gap": "20px",
+                        "flexWrap": "wrap",
+                        "marginBottom": "25px"
                     },
                     children=[
                         html.Div(id="card-ftd"),
@@ -194,8 +177,6 @@ app.layout = html.Div(
                         html.Div(id="card-total-amount"),
                     ]
                 ),
-
-                html.Br(),
 
                 html.Div(style={"display": "flex", "flexWrap": "wrap"}, children=[
                     dcc.Graph(id="pie-country-deposits", style={"width": "48%"}),
@@ -309,7 +290,6 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         columns
     )
 
-
     # === 9️⃣ Captura PDF/PPT desde iframe ===
 app.index_string = '''
 <!DOCTYPE html>
@@ -354,3 +334,4 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
