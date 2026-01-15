@@ -36,9 +36,30 @@ if "usd_total" not in df.columns:
             df.rename(columns={alt: "usd_total"}, inplace=True)
             break
 
-df["usd_total"] = df["usd_total"].apply(
-    lambda x: float(re.sub(r"[^\d.-]", "", str(x))) if pd.notna(x) else 0
-)
+# 🔧 FIX CRÍTICO — misma limpieza que Comisiones
+def limpiar_usd(valor):
+    if pd.isna(valor):
+        return 0.0
+    s = str(valor).strip()
+    if s == "":
+        return 0.0
+    s = re.sub(r"[^\d,.\-]", "", s)
+    if "." in s and "," in s:
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    elif "," in s and "." not in s:
+        partes = s.split(",")
+        s = s.replace(",", ".") if len(partes[-1]) == 2 else s.replace(",", "")
+    elif s.count(".") > 1:
+        s = s.replace(".", "")
+    try:
+        return float(s)
+    except:
+        return 0.0
+
+df["usd_total"] = df["usd_total"].apply(limpiar_usd)
 
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 df = df[df["date"].notna()]
@@ -131,39 +152,19 @@ app.layout = html.Div(
                 ),
 
                 filtro_titulo("Team Leader"),
-                dcc.Dropdown(
-                    sorted(df["team"].dropna().unique()),
-                    multi=True,
-                    id="filtro-team"
-                ),
+                dcc.Dropdown(sorted(df["team"].dropna().unique()), multi=True, id="filtro-team"),
 
                 filtro_titulo("Agent"),
-                dcc.Dropdown(
-                    sorted(df["agent"].dropna().unique()),
-                    multi=True,
-                    id="filtro-agent"
-                ),
+                dcc.Dropdown(sorted(df["agent"].dropna().unique()), multi=True, id="filtro-agent"),
 
                 filtro_titulo("ID"),
-                dcc.Dropdown(
-                    sorted(df["id"].dropna().unique()),
-                    multi=False,
-                    id="filtro-id"
-                ),
+                dcc.Dropdown(sorted(df["id"].dropna().unique()), multi=False, id="filtro-id"),
 
                 filtro_titulo("Affiliate"),
-                dcc.Dropdown(
-                    sorted(df["affiliate"].dropna().unique()),
-                    multi=True,
-                    id="filtro-affiliate"
-                ),
+                dcc.Dropdown(sorted(df["affiliate"].dropna().unique()), multi=True, id="filtro-affiliate"),
 
                 filtro_titulo("Country"),
-                dcc.Dropdown(
-                    sorted(df["country"].dropna().unique()),
-                    multi=True,
-                    id="filtro-country"
-                ),
+                dcc.Dropdown(sorted(df["country"].dropna().unique()), multi=True, id="filtro-country"),
             ]),
 
             # ===== MAIN =====
@@ -255,7 +256,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if agents:
         df_calc = df_calc[df_calc["agent"].isin(agents)]
 
-    # ===== MÉTRICAS ESTABLES =====
+    # ===== MÉTRICAS DEFINITIVAS =====
     total_amount = df_calc["usd_total"].sum()
     total_deposits = len(df_calc)
 
@@ -275,12 +276,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     )
     pie_amount_affiliate = px.pie(df_calc, names="affiliate", values="usd_total")
 
-    for fig in [
-        pie_deposits_country,
-        pie_amount_country,
-        pie_deposits_affiliate,
-        pie_amount_affiliate
-    ]:
+    for fig in [pie_deposits_country, pie_amount_country, pie_deposits_affiliate, pie_amount_affiliate]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
     # ===== TABLE =====
@@ -290,8 +286,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     df_table["total_deposits"] = 1
 
     df_table = df_table[
-        ["date", "id", "agent", "team", "country",
-         "affiliate", "total_amount", "total_deposits"]
+        ["date", "id", "agent", "team", "country", "affiliate", "total_amount", "total_deposits"]
     ]
 
     columns = [{"name": c.upper(), "id": c} for c in df_table.columns]
@@ -308,7 +303,6 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         df_table.to_dict("records"),
         columns
     )
-
     # === 9️⃣ Captura PDF/PPT desde iframe ===
 app.index_string = '''
 <!DOCTYPE html>
@@ -353,6 +347,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
