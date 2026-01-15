@@ -256,10 +256,14 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if agents:
         df_calc = df_calc[df_calc["agent"].isin(agents)]
 
-    # ===== MÉTRICAS DEFINITIVAS =====
+    # 🔥🔥🔥 FIX DEFINITIVO (MISMA LÓGICA QUE COMISIONES)
+    df_calc = df_calc[df_calc["type"].isin(["FTD", "RTN"])]
+
+    # ===== MÉTRICAS CORRECTAS =====
     total_amount = df_calc["usd_total"].sum()
     total_deposits = len(df_calc)
 
+    # (Se dejan en 0 como pediste)
     ftd_ids = 0
     std_count = 0
 
@@ -276,7 +280,12 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     )
     pie_amount_affiliate = px.pie(df_calc, names="affiliate", values="usd_total")
 
-    for fig in [pie_deposits_country, pie_amount_country, pie_deposits_affiliate, pie_amount_affiliate]:
+    for fig in [
+        pie_deposits_country,
+        pie_amount_country,
+        pie_deposits_affiliate,
+        pie_amount_affiliate
+    ]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
     # ===== TABLE =====
@@ -286,7 +295,8 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     df_table["total_deposits"] = 1
 
     df_table = df_table[
-        ["date", "id", "agent", "team", "country", "affiliate", "total_amount", "total_deposits"]
+        ["date", "id", "agent", "team", "country",
+         "affiliate", "total_amount", "total_deposits"]
     ]
 
     columns = [{"name": c.upper(), "id": c} for c in df_table.columns]
@@ -303,6 +313,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         df_table.to_dict("records"),
         columns
     )
+
     # === 9️⃣ Captura PDF/PPT desde iframe ===
 app.index_string = '''
 <!DOCTYPE html>
@@ -347,6 +358,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
