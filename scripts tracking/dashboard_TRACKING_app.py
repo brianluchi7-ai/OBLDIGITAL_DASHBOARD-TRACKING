@@ -282,18 +282,22 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         (df_calc["date_ftd"] < end)
     ]["id"].nunique()
 
-    # --- STD REAL (primer RTN posterior al FTD por ID)
+    # ======================
+    # STD = primer RTN después del FTD por ID
+    # ======================
+    
+    rtn_after_ftd = df_calc[
+        (df_calc["type"] == "RTN") &
+        (df_calc["date"] > df_calc["date_ftd"])
+    ]
+    
     std_df = (
-        df_calc[df_calc["type"] == "RTN"]
-        .merge(
-            df_calc[df_calc["type"] == "FTD"][["id", "date_ftd"]],
-            on="id",
-            how="inner"
-        )
+        rtn_after_ftd
+        .sort_values("date")
+        .groupby("id", as_index=False)
+        .first()
     )
-
-    std_df = std_df[std_df["date"] > std_df["date_ftd"]]
-    std_df = std_df.sort_values("date").groupby("id").first().reset_index()
+    
     std_count = len(std_df)
 
     # ======================
@@ -391,6 +395,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
