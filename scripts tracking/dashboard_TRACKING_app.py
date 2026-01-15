@@ -54,7 +54,7 @@ df = df[df["date"].notna()]
 df["date"] = df["date"].dt.tz_localize(None)
 
 # ========================
-# LIMPIEZA USD (MISMA LÓGICA BUENA)
+# LIMPIEZA USD
 # ========================
 def limpiar_usd(valor):
     if pd.isna(valor):
@@ -91,20 +91,39 @@ app = dash.Dash(__name__)
 server = app.server
 app.title = "OBL Digital — Deposits Dashboard"
 
+# ========================
+# 🔥 CARD STYLE UNIFICADO
+# ========================
+CARD_STYLE = {
+    "backgroundColor": "#1a1a1a",
+    "padding": "20px",
+    "borderRadius": "12px",
+    "textAlign": "center",
+    "boxShadow": "0 0 12px rgba(212,175,55,0.35)",
+    "width": "22%",
+    "minWidth": "220px",
+    "height": "120px",
+    "display": "flex",
+    "flexDirection": "column",
+    "justifyContent": "center",
+}
+
 def card(title, value, money=False):
     val = f"${value:,.2f}" if money else f"{int(value):,}"
     return html.Div(
         [
-            html.H4(title, style={"color": "#D4AF37"}),
-            html.H2(val, style={"color": "#FFF"})
+            html.H4(title, style={
+                "color": "#D4AF37",
+                "marginBottom": "10px",
+                "fontSize": "14px"
+            }),
+            html.H2(val, style={
+                "color": "#FFF",
+                "fontSize": "26px",
+                "margin": "0"
+            })
         ],
-        style={
-            "backgroundColor": "#1a1a1a",
-            "padding": "20px",
-            "borderRadius": "10px",
-            "textAlign": "center",
-            "boxShadow": "0 0 10px rgba(212,175,55,0.3)",
-        }
+        style=CARD_STYLE
     )
 
 # ========================
@@ -160,12 +179,21 @@ app.layout = html.Div(
             # === MAIN ===
             html.Div(style={"width": "72%"}, children=[
 
-                html.Div(style={"display": "flex", "justifyContent": "space-around"}, children=[
-                    html.Div(id="card-ftd"),
-                    html.Div(id="card-total-deposits"),
-                    html.Div(id="card-std"),
-                    html.Div(id="card-total-amount"),
-                ]),
+                html.Div(
+                    style={
+                        "display": "flex",
+                        "justifyContent": "space-between",
+                        "alignItems": "stretch",
+                        "gap": "15px",
+                        "marginBottom": "20px"
+                    },
+                    children=[
+                        html.Div(id="card-ftd"),
+                        html.Div(id="card-total-deposits"),
+                        html.Div(id="card-std"),
+                        html.Div(id="card-total-amount"),
+                    ]
+                ),
 
                 html.Br(),
 
@@ -243,7 +271,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
 
     df_f = df_f[df_f["usd_total"] > 0]
 
-    ftds = (df_f["deposit_type"].str.upper() == "Ftd".upper()).sum()
+    ftds = (df_f["deposit_type"].str.upper() == "FTD").sum()
     total_deposits = len(df_f)
     total_amount = df_f["usd_total"].sum()
 
@@ -280,6 +308,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         df_table.to_dict("records"),
         columns
     )
+
 
     # === 9️⃣ Captura PDF/PPT desde iframe ===
 app.index_string = '''
@@ -325,32 +354,3 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
