@@ -51,18 +51,9 @@ for col in ["country", "affiliate", "team", "agent"]:
 
 df["type"] = df["type"].astype(str).str.strip().str.upper()
 
-# =====================================================
-# ✅ DATE_FTD REAL (primer depósito histórico por ID)
-# =====================================================
-df_first_deposit = (
-    df.sort_values("date")
-      .groupby("id", as_index=False)
-      .first()[["id", "date"]]
-      .rename(columns={"date": "date_ftd"})
-)
-
-df = df.merge(df_first_deposit, on="id", how="left")
-
+# ========================
+# === FECHAS ============
+# ========================
 fecha_min = pd.Timestamp("2025-09-01")
 fecha_max = df["date"].max()
 
@@ -89,15 +80,18 @@ def filtro_titulo(texto):
 
 def card(title, value, is_money=True):
     display_value = f"${value:,.2f}" if is_money else f"{int(value):,}"
-    return html.Div([
-        html.H4(title, style={"color": "#D4AF37"}),
-        html.H2(display_value, style={"color": "#FFF"})
-    ], style={
-        "backgroundColor": "#1a1a1a",
-        "padding": "20px",
-        "borderRadius": "10px",
-        "textAlign": "center"
-    })
+    return html.Div(
+        [
+            html.H4(title, style={"color": "#D4AF37"}),
+            html.H2(display_value, style={"color": "#FFF"})
+        ],
+        style={
+            "backgroundColor": "#1a1a1a",
+            "padding": "20px",
+            "borderRadius": "10px",
+            "textAlign": "center"
+        }
+    )
 
 # ========================
 # === LAYOUT =============
@@ -105,7 +99,6 @@ def card(title, value, is_money=True):
 app.layout = html.Div(
     style={
         "backgroundColor": "#0d0d0d",
-        "color": "#000000",
         "fontFamily": "Arial",
         "padding": "20px"
     },
@@ -139,14 +132,14 @@ app.layout = html.Div(
 
                 filtro_titulo("Team Leader"),
                 dcc.Dropdown(
-                    sorted(df[df["type"] == "RTN"]["team"].dropna().unique()),
+                    sorted(df["team"].dropna().unique()),
                     multi=True,
                     id="filtro-team"
                 ),
 
                 filtro_titulo("Agent"),
                 dcc.Dropdown(
-                    sorted(df[df["type"] == "RTN"]["agent"].dropna().unique()),
+                    sorted(df["agent"].dropna().unique()),
                     multi=True,
                     id="filtro-agent"
                 ),
@@ -242,17 +235,14 @@ app.layout = html.Div(
 )
 def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countries):
 
-    # ===== FECHAS SEGURAS =====
     if start is None or end is None:
         start = fecha_min
         end = fecha_max + pd.Timedelta(days=1)
     else:
-        start = pd.to_datetime(start).normalize()
-        end = pd.to_datetime(end).normalize() + pd.Timedelta(days=1)
+        start = pd.to_datetime(start)
+        end = pd.to_datetime(end) + pd.Timedelta(days=1)
 
-    # ===== DATASET BASE (IGUAL QUE COMISIONES) =====
-    df_calc = df.copy()
-    df_calc = df_calc[(df_calc["date"] >= start) & (df_calc["date"] < end)]
+    df_calc = df[(df["date"] >= start) & (df["date"] < end)]
 
     if affiliates:
         df_calc = df_calc[df_calc["affiliate"].isin(affiliates)]
@@ -265,49 +255,20 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     if agents:
         df_calc = df_calc[df_calc["agent"].isin(agents)]
 
-    # =================================================
-    # ✅ MÉTRICAS CORRECTAS (ALINEADAS CON LTV / COMISIONES)
-    # =================================================
-
-    # --- TOTAL AMOUNT (igual que Ventas USD)
+    # ===== MÉTRICAS ESTABLES =====
     total_amount = df_calc["usd_total"].sum()
-
-    # --- TOTAL DEPOSITS (igual que Total Ventas en Comisiones)
     total_deposits = len(df_calc)
 
-    # --- FTD REAL (IDs únicos cuyo primer depósito cae en el rango)
-    ftd_ids = df_calc[
-        (df_calc["type"] == "FTD") &
-        (df_calc["date_ftd"] >= start) &
-        (df_calc["date_ftd"] < end)
-    ]["id"].nunique()
+    ftd_ids = 0
+    std_count = 0
 
-    # ======================
-    # STD = primer RTN después del FTD por ID
-    # ======================
-    
-    rtn_after_ftd = df_calc[
-        (df_calc["type"] == "RTN") &
-        (df_calc["date"] > df_calc["date_ftd"])
-    ]
-    
-    std_df = (
-        rtn_after_ftd
-        .sort_values("date")
-        .groupby("id", as_index=False)
-        .first()
-    )
-    
-    std_count = len(std_df)
-
-    # ======================
-    # === CHARTS ===========
-    # ======================
+    # ===== CHARTS =====
     pie_deposits_country = px.pie(
         df_calc.groupby("country").size().reset_index(name="count"),
         names="country", values="count"
     )
     pie_amount_country = px.pie(df_calc, names="country", values="usd_total")
+
     pie_deposits_affiliate = px.pie(
         df_calc.groupby("affiliate").size().reset_index(name="count"),
         names="affiliate", values="count"
@@ -322,18 +283,15 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     ]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
-    # ======================
-    # === TABLE ============
-    # ======================
+    # ===== TABLE =====
     df_table = df_calc.copy()
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
-    df_table["date_ftd"] = df_table["date_ftd"].dt.strftime("%Y-%m-%d")
     df_table["total_amount"] = df_table["usd_total"]
     df_table["total_deposits"] = 1
 
     df_table = df_table[
-        ["date", "id", "agent", "team", "country", "affiliate",
-         "date_ftd", "total_amount", "total_deposits"]
+        ["date", "id", "agent", "team", "country",
+         "affiliate", "total_amount", "total_deposits"]
     ]
 
     columns = [{"name": c.upper(), "id": c} for c in df_table.columns]
@@ -395,6 +353,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
