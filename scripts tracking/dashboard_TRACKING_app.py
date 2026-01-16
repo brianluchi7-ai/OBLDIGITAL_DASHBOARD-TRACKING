@@ -53,21 +53,6 @@ df = df[df["date"].notna()]
 df["date"] = df["date"].dt.tz_localize(None)
 
 # ========================
-# DATE_FTD REAL (primer FTD histórico por ID)
-# ========================
-df["deposit_type"] = df["deposit_type"].str.upper()
-
-df_ftd_real = (
-    df[df["deposit_type"] == "FTD"]
-    .sort_values("date")
-    .groupby("id", as_index=False)
-    .first()[["id", "date"]]
-    .rename(columns={"date": "date_ftd"})
-)
-
-df = df.merge(df_ftd_real, on="id", how="left")
-
-# ========================
 # LIMPIEZA USD
 # ========================
 def limpiar_usd(valor):
@@ -92,6 +77,19 @@ for col in ["team", "agent", "country", "affiliate", "deposit_type", "id"]:
     if col in df.columns:
         df[col] = df[col].astype(str).str.strip().str.title()
         df[col].replace({"Nan": None, "None": None, "": None}, inplace=True)
+
+# ========================
+# 🔥 FECHA REAL DE PRIMER FTD POR ID (STD BASE)
+# ========================
+df_ftd_date = (
+    df[df["deposit_type"].str.upper() == "FTD"]
+    .sort_values("date")
+    .groupby("id", as_index=False)
+    .first()[["id", "date"]]
+    .rename(columns={"date": "date_ftd"})
+)
+
+df = df.merge(df_ftd_date, on="id", how="left")
 
 # ========================
 # FECHAS UI
@@ -267,32 +265,21 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     df_f = df_f[df_f["usd_total"] > 0]
 
     # === FTD ===
-    ftds = (df_f["deposit_type"] == "FTD").sum()
+    ftds = (df_f["deposit_type"].str.upper() == "FTD").sum()
 
-    # === TOTAL DEPOSITS ===
-    total_deposits = len(df_f)
-
-    # === TOTAL AMOUNT ===
-    total_amount = df_f["usd_total"].sum()
-
-    # === STD REAL (FIX DEFINITIVO) ===
-    df_std_base = df_f[
-        (df_f["deposit_type"] == "RTN") &
-        (df_f["date_ftd"].notna()) &
+    # === STD REAL ===
+    rtn_after_ftd = df_f[
+        (df_f["deposit_type"].str.upper() == "RTN") &
         (df_f["date"] > df_f["date_ftd"]) &
         (df_f["date"].dt.to_period("M") == df_f["date_ftd"].dt.to_period("M"))
-    ].copy()
+    ]
 
-    df_std = (
-        df_std_base
-        .sort_values("date")
-        .groupby("id", as_index=False)
-        .first()
-    )
+    std_count = rtn_after_ftd["id"].nunique()
 
-    std_count = len(df_std)
+    # === TOTALES ===
+    total_deposits = len(df_f)
+    total_amount = df_f["usd_total"].sum()
 
-    # === GRÁFICAS ===
     pie_country_dep = px.pie(
         df_f.groupby("country").size().reset_index(name="count"),
         names="country", values="count"
@@ -308,7 +295,6 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     for fig in [pie_country_dep, pie_country_amt, pie_aff_dep, pie_aff_amt]:
         fig.update_layout(paper_bgcolor="#0d0d0d", font_color="#f2f2f2")
 
-    # === TABLA ===
     df_table = df_f.copy()
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
     df_table["total_deposits"] = 1
@@ -331,6 +317,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
         df_table.to_dict("records"),
         columns
     )
+
     # === 9️⃣ Captura PDF/PPT desde iframe ===
 app.index_string = '''
 <!DOCTYPE html>
@@ -375,6 +362,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
