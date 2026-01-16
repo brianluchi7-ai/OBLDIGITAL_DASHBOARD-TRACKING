@@ -79,6 +79,19 @@ for col in ["team", "agent", "country", "affiliate", "deposit_type", "id"]:
         df[col].replace({"Nan": None, "None": None, "": None}, inplace=True)
 
 # ========================
+# 🔥 FECHA REAL DE PRIMER FTD POR ID (STD BASE)
+# ========================
+df_ftd_date = (
+    df[df["deposit_type"].str.upper() == "FTD"]
+    .sort_values("date")
+    .groupby("id", as_index=False)
+    .first()[["id", "date"]]
+    .rename(columns={"date": "date_ftd"})
+)
+
+df = df.merge(df_ftd_date, on="id", how="left")
+
+# ========================
 # FECHAS UI
 # ========================
 fecha_min, fecha_max = df["date"].min(), df["date"].max()
@@ -161,7 +174,6 @@ app.layout = html.Div(
             # === MAIN ===
             html.Div(style={"width": "72%"}, children=[
 
-                # 🔥 CARDS BIEN ALINEADAS
                 html.Div(
                     style={
                         "display": "flex",
@@ -252,16 +264,32 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
 
     df_f = df_f[df_f["usd_total"] > 0]
 
+    # === FTD ===
     ftds = (df_f["deposit_type"].str.upper() == "FTD").sum()
+
+    # === STD REAL ===
+    rtn_after_ftd = df_f[
+        (df_f["deposit_type"].str.upper() == "RTN") &
+        (df_f["date"] > df_f["date_ftd"]) &
+        (df_f["date"].dt.to_period("M") == df_f["date_ftd"].dt.to_period("M"))
+    ]
+
+    std_count = rtn_after_ftd["id"].nunique()
+
+    # === TOTALES ===
     total_deposits = len(df_f)
     total_amount = df_f["usd_total"].sum()
 
-    pie_country_dep = px.pie(df_f.groupby("country").size().reset_index(name="count"),
-                             names="country", values="count")
+    pie_country_dep = px.pie(
+        df_f.groupby("country").size().reset_index(name="count"),
+        names="country", values="count"
+    )
     pie_country_amt = px.pie(df_f, names="country", values="usd_total")
 
-    pie_aff_dep = px.pie(df_f.groupby("affiliate").size().reset_index(name="count"),
-                         names="affiliate", values="count")
+    pie_aff_dep = px.pie(
+        df_f.groupby("affiliate").size().reset_index(name="count"),
+        names="affiliate", values="count"
+    )
     pie_aff_amt = px.pie(df_f, names="affiliate", values="usd_total")
 
     for fig in [pie_country_dep, pie_country_amt, pie_aff_dep, pie_aff_amt]:
@@ -280,7 +308,7 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     return (
         card("FTD'S", ftds),
         card("TOTAL DEPOSITS", total_deposits),
-        card("STD", 0),
+        card("STD", std_count),
         card("TOTAL AMOUNT", total_amount, True),
         pie_country_dep,
         pie_country_amt,
@@ -334,4 +362,5 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
