@@ -79,19 +79,6 @@ for col in ["team", "agent", "country", "affiliate", "deposit_type", "id"]:
         df[col].replace({"Nan": None, "None": None, "": None}, inplace=True)
 
 # ========================
-# 🔥 FECHA REAL DE PRIMER FTD POR ID (STD BASE)
-# ========================
-df_ftd_date = (
-    df[df["deposit_type"].str.upper() == "FTD"]
-    .sort_values("date")
-    .groupby("id", as_index=False)
-    .first()[["id", "date"]]
-    .rename(columns={"date": "date_ftd"})
-)
-
-df = df.merge(df_ftd_date, on="id", how="left")
-
-# ========================
 # FECHAS UI
 # ========================
 fecha_min, fecha_max = df["date"].min(), df["date"].max()
@@ -267,14 +254,36 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
     # === FTD ===
     ftds = (df_f["deposit_type"].str.upper() == "FTD").sum()
 
-    # === STD REAL ===
-    rtn_after_ftd = df_f[
-        (df_f["deposit_type"].str.upper() == "RTN") &
-        (df_f["date"] > df_f["date_ftd"]) &
-        (df_f["date"].dt.to_period("M") == df_f["date_ftd"].dt.to_period("M"))
-    ]
+    # === STD REAL CORRECTO (POR MES) ===
+    df_f["year_month"] = df_f["date"].dt.to_period("M")
 
-    std_count = rtn_after_ftd["id"].nunique()
+    df_ftd_month = (
+        df_f[df_f["deposit_type"].str.upper() == "FTD"]
+        .sort_values("date")
+        .groupby(["id", "year_month"], as_index=False)
+        .first()[["id", "year_month", "date"]]
+        .rename(columns={"date": "date_ftd"})
+    )
+
+    df_rtn_month = df_f[
+        df_f["deposit_type"].str.upper() == "RTN"
+    ][["id", "year_month", "date"]]
+
+    df_std = df_rtn_month.merge(
+        df_ftd_month,
+        on=["id", "year_month"],
+        how="inner"
+    )
+
+    df_std = df_std[df_std["date"] > df_std["date_ftd"]]
+
+    std_count = (
+        df_std
+        .groupby(["id", "year_month"])
+        .size()
+        .reset_index()
+        .shape[0]
+    )
 
     # === TOTALES ===
     total_deposits = len(df_f)
@@ -362,6 +371,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
