@@ -6,7 +6,7 @@ import plotly.express as px
 from conexion_mysql import crear_conexion
 
 # ======================================================
-# === OBL DIGITAL DASHBOARD — DEPOSITS (MONTH + STD) ===
+# === OBL DIGITAL DASHBOARD — DEPOSITS (NEW BASE) ===
 # ======================================================
 
 def cargar_datos():
@@ -51,7 +51,6 @@ def convertir_fecha(valor):
 df["date"] = df["date"].astype(str).apply(convertir_fecha)
 df = df[df["date"].notna()]
 df["date"] = df["date"].dt.tz_localize(None)
-df["month"] = df["date"].dt.to_period("M")
 
 # ========================
 # LIMPIEZA USD
@@ -80,10 +79,15 @@ for col in ["team", "agent", "country", "affiliate", "deposit_type", "id"]:
         df[col].replace({"Nan": None, "None": None, "": None}, inplace=True)
 
 # ========================
+# MONTH DISPONIBLES (FTD BASE)
+# ========================
+df["month"] = df["date"].dt.to_period("M")
+meses_disponibles = sorted(df["month"].astype(str).unique())
+
+# ========================
 # FECHAS UI
 # ========================
 fecha_min, fecha_max = df["date"].min(), df["date"].max()
-meses_disponibles = sorted(df["month"].astype(str).unique())
 
 # ========================
 # APP
@@ -96,7 +100,7 @@ def card(title, value, money=False):
     val = f"${value:,.2f}" if money else f"{int(value):,}"
     return html.Div(
         [
-            html.H4(title, style={"color": "#D4AF37"}),
+            html.H4(title, style={"color": "#D4AF37", "marginBottom": "10px"}),
             html.H2(val, style={"color": "#FFF"})
         ],
         style={
@@ -105,7 +109,8 @@ def card(title, value, money=False):
             "borderRadius": "12px",
             "textAlign": "center",
             "boxShadow": "0 0 10px rgba(212,175,55,0.35)",
-            "width": "220px"
+            "width": "220px",
+            "minWidth": "220px"
         }
     )
 
@@ -131,17 +136,25 @@ app.layout = html.Div(
                 "backgroundColor": "#1a1a1a",
                 "padding": "20px",
                 "borderRadius": "12px",
-                "boxShadow": "0 0 15px rgba(212,175,55,0.3)"
+                "boxShadow": "0 0 15px rgba(212,175,55,0.3)",
+                "textAlign": "center"
             }, children=[
 
                 html.H4("Month (FTD Base)", style={"color": "#D4AF37"}),
                 dcc.Dropdown(
-                    options=[{"label": m, "value": m} for m in meses_disponibles],
+                    options=[
+                        {
+                            "label": pd.Period(m).strftime("%B %Y").title(),
+                            "value": m
+                        }
+                        for m in meses_disponibles
+                    ],
                     id="filtro-month",
-                    placeholder="Select month"
+                    placeholder="Select month",
+                    clearable=True
                 ),
 
-                html.H4("Date", style={"color": "#D4AF37"}),
+                html.H4("Date", style={"color": "#D4AF37", "marginTop": "15px"}),
                 dcc.DatePickerRange(
                     id="filtro-fecha",
                     start_date=fecha_min,
@@ -156,7 +169,7 @@ app.layout = html.Div(
                 dcc.Dropdown(sorted(df["agent"].dropna().unique()), multi=True, id="filtro-agent"),
 
                 html.H4("ID", style={"color": "#D4AF37"}),
-                dcc.Dropdown(sorted(df["id"].dropna().unique()), id="filtro-id"),
+                dcc.Dropdown(sorted(df["id"].dropna().unique()), multi=False, id="filtro-id"),
 
                 html.H4("Affiliate", style={"color": "#D4AF37"}),
                 dcc.Dropdown(sorted(df["affiliate"].dropna().unique()), multi=True, id="filtro-affiliate"),
@@ -169,7 +182,13 @@ app.layout = html.Div(
             html.Div(style={"width": "72%"}, children=[
 
                 html.Div(
-                    style={"display": "flex", "justifyContent": "center", "gap": "20px", "flexWrap": "wrap"},
+                    style={
+                        "display": "flex",
+                        "justifyContent": "center",
+                        "gap": "20px",
+                        "flexWrap": "wrap",
+                        "marginBottom": "25px"
+                    },
                     children=[
                         html.Div(id="card-ftd"),
                         html.Div(id="card-total-deposits"),
@@ -178,14 +197,20 @@ app.layout = html.Div(
                     ]
                 ),
 
-                html.Br(),
-
                 dash_table.DataTable(
                     id="tabla-detalle",
                     page_size=15,
                     style_table={"overflowX": "auto"},
-                    style_cell={"backgroundColor": "#1a1a1a", "color": "#f2f2f2", "textAlign": "center"},
-                    style_header={"backgroundColor": "#D4AF37", "color": "#000", "fontWeight": "bold"},
+                    style_cell={
+                        "backgroundColor": "#1a1a1a",
+                        "color": "#f2f2f2",
+                        "textAlign": "center"
+                    },
+                    style_header={
+                        "backgroundColor": "#D4AF37",
+                        "color": "#000",
+                        "fontWeight": "bold"
+                    },
                 )
             ])
         ])
@@ -206,6 +231,7 @@ app.layout = html.Div(
     ],
     [
         Input("filtro-month", "value"),
+        Input("filtro-fecha", "start_date"),
         Input("filtro-fecha", "end_date"),
         Input("filtro-team", "value"),
         Input("filtro-agent", "value"),
@@ -214,10 +240,12 @@ app.layout = html.Div(
         Input("filtro-country", "value"),
     ]
 )
-def actualizar_dashboard(month_sel, end_date, teams, agents, id_sel, affiliates, countries):
+def actualizar_dashboard(month_sel, start, end, teams, agents, id_sel, affiliates, countries):
 
     df_f = df.copy()
 
+    if start and end:
+        df_f = df_f[(df_f["date"] >= start) & (df_f["date"] <= end)]
     if teams:
         df_f = df_f[df_f["team"].isin(teams)]
     if agents:
@@ -232,42 +260,48 @@ def actualizar_dashboard(month_sel, end_date, teams, agents, id_sel, affiliates,
     df_f = df_f[df_f["usd_total"] > 0]
 
     # ========================
-    # MODO MONTH ACTIVO
+    # MODO NORMAL (SIN MONTH)
     # ========================
-    if month_sel:
+    if not month_sel:
+        ftds = (df_f["deposit_type"].str.upper() == "FTD").sum()
+        std_count = 0
+        total_deposits = len(df_f)
+        total_amount = df_f["usd_total"].sum()
 
-        base_month = pd.Period(month_sel)
-        ftd_base = df_f[
-            (df_f["deposit_type"].str.upper() == "FTD") &
-            (df_f["month"] == base_month)
+        df_table = df_f.copy()
+
+    # ========================
+    # MODO MONTH (FTD BASE)
+    # ========================
+    else:
+        month_period = pd.Period(month_sel)
+
+        ftd_ids = (
+            df[
+                (df["deposit_type"].str.upper() == "FTD") &
+                (df["date"].dt.to_period("M") == month_period)
+            ][["id", "date"]]
+            .rename(columns={"date": "ftd_date"})
+        )
+
+        ftds = ftd_ids["id"].nunique()
+
+        df_rtn = df_f[
+            (df_f["deposit_type"].str.upper() == "RTN") &
+            (df_f["id"].isin(ftd_ids["id"]))
         ]
 
-        ftd_ids = ftd_base["id"].unique()
-        ftd_count = len(ftd_ids)
+        std_df = df_rtn.merge(ftd_ids, on="id", how="inner")
+        std_df = std_df[std_df["date"] > std_df["ftd_date"]]
 
-        df_after = df_f[
-            (df_f["id"].isin(ftd_ids)) &
-            (df_f["date"] > ftd_base.groupby("id")["date"].transform("min")) &
-            (df_f["date"] <= pd.to_datetime(end_date))
-        ]
-
-        std_ids = df_after["id"].unique()
+        std_ids = std_df["id"].unique()
         std_count = len(std_ids)
 
-        df_table = df_after[df_after["id"].isin(std_ids)]
+        total_deposits = len(df_f)
+        total_amount = df_f["usd_total"].sum()
 
-    else:
-        # ========================
-        # MODO NORMAL
-        # ========================
-        ftd_count = (df_f["deposit_type"].str.upper() == "FTD").sum()
-        std_count = 0
-        df_table = df_f
+        df_table = std_df.copy()
 
-    total_deposits = len(df_f)
-    total_amount = df_f["usd_total"].sum()
-
-    df_table = df_table.copy()
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
     df_table["total_deposits"] = 1
 
@@ -278,7 +312,7 @@ def actualizar_dashboard(month_sel, end_date, teams, agents, id_sel, affiliates,
     columns = [{"name": c.upper(), "id": c} for c in df_table.columns]
 
     return (
-        card("FTD'S", ftd_count),
+        card("FTD'S", ftds),
         card("TOTAL DEPOSITS", total_deposits),
         card("STD", std_count),
         card("TOTAL AMOUNT", total_amount, True),
@@ -330,6 +364,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
