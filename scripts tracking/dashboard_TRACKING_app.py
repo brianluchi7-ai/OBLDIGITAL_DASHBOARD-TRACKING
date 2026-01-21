@@ -251,29 +251,25 @@ def actualizar_dashboard(start, end, teams, agents, id_sel, affiliates, countrie
 
     df_f = df_f[df_f["usd_total"] > 0]
 
-    # === FTD ===
-    ftds = (df_f["deposit_type"].str.upper() == "FTD").sum()
+    # === FTD BASE FIJA POR MES ===
+    base_month = pd.to_datetime(start).to_period("M")
 
-    # === STD REAL (POR MES, CORRECTO) ===
-    df_f["month"] = df_f["date"].dt.to_period("M")
+    ftd_base = df[
+        (df["deposit_type"].str.upper() == "FTD") &
+        (df["date"].dt.to_period("M") == base_month)
+    ]
 
-    ftd_month = df_f[df_f["deposit_type"].str.upper() == "FTD"][
-        ["id", "month", "date"]
-    ].rename(columns={"date": "ftd_date"})
+    ftd_ids = ftd_base["id"].unique()
+    ftds = len(ftd_ids)
 
-    rtn_month = df_f[df_f["deposit_type"].str.upper() == "RTN"][
-        ["id", "month", "date"]
-    ].rename(columns={"date": "rtn_date"})
+    # === STD REAL (COHORTE FTD) ===
+    std_df = df_f[
+        (df_f["id"].isin(ftd_ids)) &
+        (df_f["deposit_type"].str.upper() != "FTD") &
+        (df_f["date"] > df_f.groupby("id")["date"].transform("min"))
+    ]
 
-    std_df = ftd_month.merge(
-        rtn_month,
-        on=["id", "month"],
-        how="inner"
-    )
-
-    std_df = std_df[std_df["rtn_date"] > std_df["ftd_date"]]
-
-    std_count = std_df[["id", "month"]].drop_duplicates().shape[0]
+    std_count = std_df["id"].nunique()
 
     # === TOTALES ===
     total_deposits = len(df_f)
@@ -361,6 +357,7 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
 
 
