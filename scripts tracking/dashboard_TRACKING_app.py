@@ -244,6 +244,12 @@ def actualizar_dashboard(month_sel, start, end, teams, agents, id_sel, affiliate
 
     df_f = df.copy()
 
+    # 🔧 AJUSTE: FIJAR DATE AL MES SELECCIONADO
+    if month_sel:
+        period = pd.Period(month_sel)
+        start = period.to_timestamp("M") - pd.offsets.MonthEnd(1) + pd.Timedelta(days=1)
+        end = period.to_timestamp("M")
+
     if start and end:
         df_f = df_f[(df_f["date"] >= start) & (df_f["date"] <= end)]
     if teams:
@@ -260,30 +266,20 @@ def actualizar_dashboard(month_sel, start, end, teams, agents, id_sel, affiliate
     df_f = df_f[df_f["usd_total"] > 0]
 
     # ========================
-    # MODO NORMAL (SIN MONTH)
+    # MODO NORMAL
     # ========================
     if not month_sel:
         ftds = (df_f["deposit_type"].str.upper() == "FTD").sum()
         std_count = 0
         total_deposits = len(df_f)
         total_amount = df_f["usd_total"].sum()
-
         df_table = df_f.copy()
 
     # ========================
-    # MODO MONTH (FTD BASE)
+    # MODO MONTH
     # ========================
     else:
-        month_period = pd.Period(month_sel)
-
-        ftd_ids = (
-            df[
-                (df["deposit_type"].str.upper() == "FTD") &
-                (df["date"].dt.to_period("M") == month_period)
-            ][["id", "date"]]
-            .rename(columns={"date": "ftd_date"})
-        )
-
+        ftd_ids = df_f[df_f["deposit_type"].str.upper() == "FTD"][["id", "date"]]
         ftds = ftd_ids["id"].nunique()
 
         df_rtn = df_f[
@@ -292,15 +288,12 @@ def actualizar_dashboard(month_sel, start, end, teams, agents, id_sel, affiliate
         ]
 
         std_df = df_rtn.merge(ftd_ids, on="id", how="inner")
-        std_df = std_df[std_df["date"] > std_df["ftd_date"]]
+        std_df = std_df[std_df["date_x"] > std_df["date_y"]]
 
-        std_ids = std_df["id"].unique()
-        std_count = len(std_ids)
-
+        std_count = std_df["id"].nunique()
         total_deposits = len(df_f)
         total_amount = df_f["usd_total"].sum()
-
-        df_table = std_df.copy()
+        df_table = std_df.rename(columns={"date_x": "date"}).copy()
 
     df_table["date"] = df_table["date"].dt.strftime("%Y-%m-%d")
     df_table["total_deposits"] = 1
@@ -319,7 +312,7 @@ def actualizar_dashboard(month_sel, start, end, teams, agents, id_sel, affiliate
         df_table.to_dict("records"),
         columns
     )
-
+    
     # === 9️⃣ Captura PDF/PPT desde iframe ===
 app.index_string = '''
 <!DOCTYPE html>
@@ -364,3 +357,4 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
