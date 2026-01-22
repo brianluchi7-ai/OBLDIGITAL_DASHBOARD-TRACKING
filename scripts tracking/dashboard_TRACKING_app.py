@@ -182,26 +182,25 @@ def update(month_sel, end_date, teams, agents, id_sel, affiliates, countries):
         start = period.to_timestamp("M") - pd.offsets.MonthEnd(1) + pd.Timedelta(days=1)
         end = pd.to_datetime(end_date) if end_date else period.to_timestamp("M")
 
-        # BASE FTD
-        ftd_base = (
+        # === FTD REAL POR ID (PRIMER FTD HISTÓRICO)
+        ftd_real = (
             dff[dff["deposit_type"].str.upper() == "FTD"]
             .sort_values("date")
             .groupby("id", as_index=False)
             .first()
+            .rename(columns={"date": "ftd_date"})
         )
-        ftd_base = ftd_base[ftd_base["date"].dt.to_period("M") == period]
-        base_ids = ftd_base[["id", "date"]].rename(columns={"date": "ftd_date"})
 
-        # STD
-        rtn = dff[
-            (dff["deposit_type"].str.upper() == "RTN") &
-            (dff["id"].isin(base_ids["id"])) &
-            (dff["date"] > base_ids.set_index("id").loc[dff["id"]]["ftd_date"].values) &
-            (dff["date"] <= end)
-        ]
+        # === COHORTE DEL MES
+        ftd_base = ftd_real[ftd_real["ftd_date"].dt.to_period("M") == period]
+        base_ids = ftd_base[["id", "ftd_date"]]
 
+        # === RTN POSTERIOR AL FTD (STD REAL)
         std_df = (
-            rtn.sort_values("date")
+            dff[dff["deposit_type"].str.upper() == "RTN"]
+            .merge(base_ids, on="id", how="inner")
+            .query("date > ftd_date and date <= @end")
+            .sort_values("date")
             .groupby("id", as_index=False)
             .first()
         )
@@ -242,8 +241,6 @@ def update(month_sel, end_date, teams, agents, id_sel, affiliates, countries):
     table["total_deposits"] = 1
 
     columns = [{"name": c.upper(), "id": c} for c in table.columns]
-
-ubat
 
     return (
         card("FTD'S", ftds),
@@ -300,4 +297,5 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
 
