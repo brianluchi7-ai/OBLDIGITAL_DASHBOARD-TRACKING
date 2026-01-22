@@ -259,7 +259,7 @@ def actualizar_dashboard(month_sel, start, end, teams, agents, id_sel, affiliate
 
     df_f = df_f[df_f["usd_total"] > 0]
 
-    # ========================
+        # ========================
     # MODO NORMAL (SIN MONTH)
     # ========================
     if not month_sel:
@@ -286,26 +286,30 @@ def actualizar_dashboard(month_sel, start, end, teams, agents, id_sel, affiliate
 
         ftds = ftd_ids["id"].nunique()
 
-        # RTN posteriores al FTD
-    df_rtn = df[
-        (df["deposit_type"].str.upper() == "RTN") &
-        (df["id"].isin(ftd_ids["id"]))
-    ]
-    
-    std_df = (
-        df_rtn
-        .merge(ftd_ids, on="id", how="inner")
-        .query("date > ftd_date")
-        .sort_values("date")
-        .groupby("id", as_index=False)
-        .first()  # 🔥 SOLO EL PRIMER RTN = STD
-    )
-    
-    # Aplicar rango de fechas (END DATE)
-    if end:
-        std_df = std_df[std_df["date"] <= pd.to_datetime(end)]
-    
-    std_count = std_df.shape[0]
+        # RTN posteriores al FTD (LÓGICA EXCEL)
+        df_rtn = df[
+            (df["deposit_type"].str.upper() == "RTN") &
+            (df["id"].isin(ftd_ids["id"]))
+        ]
+
+        std_df = (
+            df_rtn
+            .merge(ftd_ids, on="id", how="inner")
+            .query("date > ftd_date")
+            .sort_values("date")
+            .groupby("id", as_index=False)
+            .first()
+        )
+
+        if end:
+            std_df = std_df[std_df["date"] <= pd.to_datetime(end)]
+
+        std_count = std_df.shape[0]
+        total_deposits = len(df_f)
+        total_amount = df_f["usd_total"].sum()
+
+        df_table = std_df.copy()
+
 
 
         total_deposits = len(df_f)
@@ -375,3 +379,4 @@ app.index_string = '''
 
 if __name__ == "__main__":
     app.run_server(debug=True, port=8053)
+
